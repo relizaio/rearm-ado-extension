@@ -17,9 +17,16 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
-        const branch = tl.getVariable('Build.SourceBranchName');
-        const version = tl.getInput('version', true)!;
+        const branch = tl.getVariable('Build.SourceBranchName') || '';
+        const version = tl.getVariable('REARM_FULL_VERSION') || '';
         const lifecycle = tl.getInput('lifecycle', false) || 'ASSEMBLED';
+        
+        if (!branch) {
+            throw new Error('Build.SourceBranchName is not available.');
+        }
+        if (!version) {
+            throw new Error('REARM_FULL_VERSION is not available. Make sure RearmReleaseInitialize task ran successfully.');
+        }
         
         // Deliverable options
         const odelId = tl.getInput('odelId', false);

@@ -17,6 +17,10 @@ Downloads and installs the ReARM CLI.
 
 Synchronizes branches, checks for changes since last release, and initializes a pending release with ReARM. Sets `DO_BUILD` variable to indicate if a build is needed.
 
+- If `version` is provided, uses `addrelease` command with the specified version
+- If `version` is not provided, uses `getversion` command to obtain version from ReARM
+- Exposes `REARM_FULL_VERSION` and `REARM_SHORT_VERSION` variables for use in subsequent tasks
+
 ### RearmReleaseFinalize
 
 Finalizes a release in ReARM with deliverable metadata, artifacts, and runs the release finalizer. Supports:
@@ -55,9 +59,11 @@ steps:
       rearmApiKeyId: '$(REARM_API_KEY_ID)'
       rearmUrl: 'https://your-rearm-server.com'
       repoPath: '.'
-      version: '$(GitVersion.SemVer)'
+      # version: '$(GitVersion.SemVer)'  # Optional - if not provided, version is obtained from ReARM
 
   - script: |
+      echo "Version: $(REARM_FULL_VERSION)"
+      echo "Short Version: $(REARM_SHORT_VERSION)"
       echo "Building..."
     condition: eq(variables['DO_BUILD'], 'true')
     displayName: 'Build (only if changes detected)'
@@ -76,16 +82,14 @@ steps:
       rearmApiKey: '$(REARM_API_KEY)'
       rearmApiKeyId: '$(REARM_API_KEY_ID)'
       rearmUrl: 'https://your-rearm-server.com'
-      version: '$(GitVersion.SemVer)'
 
-  # ... your build steps ...
+  # ... your build steps (use $(REARM_FULL_VERSION) or $(REARM_SHORT_VERSION) for tagging) ...
 
   - task: RearmReleaseFinalize@0
     inputs:
       rearmApiKey: '$(REARM_API_KEY)'
       rearmApiKeyId: '$(REARM_API_KEY_ID)'
       rearmUrl: 'https://your-rearm-server.com'
-      version: '$(GitVersion.SemVer)'
       lifecycle: 'ASSEMBLED'
       odelId: 'myregistry.azurecr.io/myapp'
       odelType: 'CONTAINER'
@@ -113,14 +117,16 @@ steps:
 | `rearmUrl` | Yes | - | ReARM server URL |
 | `repoPath` | No | `.` | Path to the repository |
 | `branch` | No | Current branch | Branch name |
-| `version` | Yes | - | Version string for the release |
+| `version` | No | - | Version string. If not provided, version is obtained from ReARM via getversion. |
 
 ### RearmReleaseInitialize Outputs
 
 | Variable | Description |
-|----------|-------------|
+|----------|--------------|
 | `DO_BUILD` | Whether a build should be performed (`true`/`false`) |
 | `LAST_COMMIT` | The last commit from the previous release |
+| `REARM_FULL_VERSION` | Full version string from ReARM |
+| `REARM_SHORT_VERSION` | Docker-tag-safe version string from ReARM |
 
 ### RearmReleaseFinalize Inputs
 
@@ -130,7 +136,6 @@ steps:
 | `rearmApiKeyId` | Yes | - | API Key ID for ReARM authentication |
 | `rearmUrl` | Yes | - | ReARM server URL |
 | `repoPath` | No | `.` | Path to the repository |
-| `version` | Yes | - | Version string for the release |
 | `lifecycle` | No | `ASSEMBLED` | Release lifecycle (ASSEMBLED, DRAFT, REJECTED) |
 | `odelId` | No | - | Deliverable identifier (e.g., container image name) |
 | `odelType` | No | - | Deliverable type (CONTAINER, APPLICATION, LIBRARY, etc.) |

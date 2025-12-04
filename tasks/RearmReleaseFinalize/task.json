@@ -44,13 +44,6 @@
             "helpMarkDown": "Path to the repository (default: current directory)"
         },
         {
-            "name": "version",
-            "type": "string",
-            "label": "Version",
-            "required": true,
-            "helpMarkDown": "Version string for the release"
-        },
-        {
             "name": "lifecycle",
             "type": "pickList",
             "label": "Lifecycle",

@@ -8,7 +8,7 @@ async function run(): Promise<void> {
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
         const branch = tl.getInput('branch', false) || tl.getVariable('Build.SourceBranchName') || '';
-        const version = tl.getInput('version', true)!;
+        const versionInput = tl.getInput('version', false) || '';
         
         // Get repository URI and commit from Azure DevOps predefined variables
         const vcsUri = tl.getVariable('Build.Repository.Uri') || '';
@@ -28,7 +28,11 @@ async function run(): Promise<void> {
         console.log(`Repository Path: ${repoPath}`);
         console.log(`Branch: ${branch}`);
         console.log(`Commit: ${commit}`);
-        console.log(`Version: ${version}`);
+        if (versionInput) {
+            console.log(`Version (from input): ${versionInput}`);
+        } else {
+            console.log('Version will be obtained from ReARM');
+        }
         
         // Find rearm in PATH
         const rearmPath = tl.which('rearm', true);
@@ -114,7 +118,10 @@ async function run(): Promise<void> {
         const buildStart = new Date().toISOString();
         tl.setVariable('BUILD_START', buildStart);
         
-        // Step 3: If build is needed, create pending release; otherwise mark as rejected
+        // Step 3: If build is needed, create pending release
+        let fullVersion = '';
+        let shortVersion = '';
+        
         if (doBuild) {
             console.log('Initializing pending release...');
             
@@ -134,33 +141,126 @@ async function run(): Promise<void> {
                 console.log('Warning: Could not get commit details');
             }
             
-            const addRelease = tl.tool(rearmPath);
-            addRelease.arg('addrelease');
-            addRelease.arg(['-k', rearmApiKey]);
-            addRelease.arg(['-i', rearmApiKeyId]);
-            addRelease.arg(['-u', rearmUrl]);
-            addRelease.arg(['--commit', commit]);
-            if (commitMessage) {
-                addRelease.arg(['--commitmessage', commitMessage]);
+            // Get commits since last release for getversion command
+            let commitsBase64 = '';
+            try {
+                let commitsOutput: string;
+                if (lastCommit && lastCommit !== 'null') {
+                    commitsOutput = execSync(
+                        `git log ${lastCommit}..${commit} --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' -- ./`,
+                        { encoding: 'utf-8', cwd: repoPath }
+                    );
+                } else {
+                    commitsOutput = execSync(
+                        `git log -1 --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae'`,
+                        { encoding: 'utf-8', cwd: repoPath }
+                    );
+                }
+                if (commitsOutput.trim()) {
+                    commitsBase64 = Buffer.from(commitsOutput).toString('base64');
+                }
+            } catch (err) {
+                console.log('Warning: Could not get commits history');
             }
-            if (commitDate) {
-                addRelease.arg(['--date', commitDate]);
-            }
-            addRelease.arg(['--vcstype', 'git']);
-            addRelease.arg(['--vcsuri', vcsUri]);
-            addRelease.arg(['--repo-path', repoPath]);
-            addRelease.arg(['--branch', branch]);
-            addRelease.arg(['--lifecycle', 'PENDING']);
-            addRelease.arg(['--version', version]);
             
-            const addResult = await addRelease.execAsync();
-            if (addResult !== 0) {
-                throw new Error(`ReARM addrelease failed with exit code ${addResult}`);
+            if (versionInput) {
+                // Version provided - use addrelease with provided version
+                const addRelease = tl.tool(rearmPath);
+                addRelease.arg('addrelease');
+                addRelease.arg(['-k', rearmApiKey]);
+                addRelease.arg(['-i', rearmApiKeyId]);
+                addRelease.arg(['-u', rearmUrl]);
+                addRelease.arg(['--commit', commit]);
+                if (commitMessage) {
+                    addRelease.arg(['--commitmessage', commitMessage]);
+                }
+                if (commitDate) {
+                    addRelease.arg(['--date', commitDate]);
+                }
+                addRelease.arg(['--vcstype', 'git']);
+                addRelease.arg(['--vcsuri', vcsUri]);
+                addRelease.arg(['--repo-path', repoPath]);
+                addRelease.arg(['--branch', branch]);
+                addRelease.arg(['--lifecycle', 'PENDING']);
+                addRelease.arg(['--version', versionInput]);
+                if (commitsBase64) {
+                    addRelease.arg(['--commits', commitsBase64]);
+                }
+                
+                const addResult = await addRelease.execAsync();
+                if (addResult !== 0) {
+                    throw new Error(`ReARM addrelease failed with exit code ${addResult}`);
+                }
+                
+                // Both versions are the same when provided via input
+                fullVersion = versionInput;
+                shortVersion = versionInput;
+                console.log('Pending release initialized successfully with provided version');
+            } else {
+                // No version provided - use getversion to obtain version and create pending release
+                console.log('Getting version from ReARM...');
+                
+                let getVersionOutput = '';
+                const getVersion = tl.tool(rearmPath);
+                getVersion.arg('getversion');
+                getVersion.arg(['-k', rearmApiKey]);
+                getVersion.arg(['-i', rearmApiKeyId]);
+                getVersion.arg(['-u', rearmUrl]);
+                getVersion.arg(['-b', branch]);
+                getVersion.arg(['--commit', commit]);
+                if (commitMessage) {
+                    getVersion.arg(['--commitmessage', commitMessage]);
+                }
+                if (commitDate) {
+                    getVersion.arg(['--date', commitDate]);
+                }
+                getVersion.arg(['--vcstype', 'git']);
+                getVersion.arg(['--vcsuri', vcsUri]);
+                getVersion.arg(['--repo-path', repoPath]);
+                if (commitsBase64) {
+                    getVersion.arg(['--commits', commitsBase64]);
+                }
+                
+                const execOptions: any = {
+                    listeners: {
+                        stdout: (data: Buffer) => {
+                            getVersionOutput += data.toString();
+                        }
+                    }
+                };
+                
+                const getVersionResult = await getVersion.execAsync(execOptions);
+                if (getVersionResult !== 0) {
+                    throw new Error(`ReARM getversion failed with exit code ${getVersionResult}`);
+                }
+                
+                // Parse version from JSON response
+                try {
+                    const versionData = JSON.parse(getVersionOutput.trim());
+                    fullVersion = versionData.version || '';
+                    shortVersion = versionData.dockerTagSafeVersion || fullVersion;
+                    console.log(`Got version from ReARM: ${fullVersion}`);
+                } catch (parseErr) {
+                    throw new Error(`Failed to parse version response: ${getVersionOutput}`);
+                }
+                
+                console.log('Pending release initialized successfully via getversion');
             }
-            console.log('Pending release initialized successfully');
         } else {
             console.log('No changes detected, skipping build');
+            // Set empty versions when no build needed
+            fullVersion = '';
+            shortVersion = '';
         }
+        
+        // Set version variables
+        tl.setVariable('REARM_FULL_VERSION', fullVersion);
+        tl.setVariable('RearmFullVersion', fullVersion, false, true);
+        tl.setVariable('REARM_SHORT_VERSION', shortVersion);
+        tl.setVariable('RearmShortVersion', shortVersion, false, true);
+        console.log(`Full Version: ${fullVersion}`);
+        console.log(`Short Version: ${shortVersion}`);
+        
         // Set REARM_COMMAND for rejected lifecycle (for use in later steps if needed)
         tl.setVariable('REARM_COMMAND', '--lifecycle REJECTED ');
         

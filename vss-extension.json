@@ -1,0 +1,40 @@
+{
+    "manifestVersion": 1,
+    "id": "rearm-cli-tasks",
+    "name": "ReARM CLI Tasks",
+    "version": "0.1.0",
+    "publisher": "Reliza",
+    "targets": [
+        {
+            "id": "Microsoft.VisualStudio.Services"
+        }
+    ],
+    "description": "Azure DevOps extension to download and setup ReARM CLI",
+    "categories": [
+        "Azure Pipelines"
+    ],
+    "icons": {
+        "default": "images/icon.png"
+    },
+    "files": [
+        {
+            "path": "tasks/RearmCliInstall"
+        }
+    ],
+    "contributions": [
+        {
+            "id": "rearm-cli-install",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [
+                "ms.vss-distributed-task.tasks"
+            ],
+            "properties": {
+                "name": "tasks/RearmCliInstall"
+            }
+        }
+    ],
+    "repository": {
+        "type": "git",
+        "uri": "https://github.com/relizaio/rearm-ado-extension"
+    }
+}

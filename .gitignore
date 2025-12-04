@@ -1,0 +1,6 @@
+node_modules/
+*.vsix
+*.js
+!tasks/**/task.json
+*.js.map
+.DS_Store

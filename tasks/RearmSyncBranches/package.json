@@ -1,14 +1,13 @@
 {
-    "name": "rearm-cli-install-task",
+    "name": "rearm-sync-branches-task",
     "version": "0.2.0",
-    "description": "Azure DevOps task to install Rearm CLI",
+    "description": "Azure DevOps task to sync branches with ReARM",
     "main": "index.js",
     "scripts": {
         "build": "tsc"
     },
     "dependencies": {
-        "azure-pipelines-task-lib": "^4.11.0",
-        "azure-pipelines-tool-lib": "^2.0.7"
+        "azure-pipelines-task-lib": "^4.11.0"
     },
     "devDependencies": {
         "@types/node": "^20.10.0",

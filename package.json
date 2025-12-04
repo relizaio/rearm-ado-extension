@@ -1,9 +1,9 @@
 {
     "name": "rearm-cli-ado-extension",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "description": "Azure DevOps extension for ReARM CLI",
     "scripts": {
-        "build": "cd tasks/RearmCliInstall && npm ci --ignore-scripts && npm run build",
+        "build": "cd tasks/RearmCliInstall && npm ci --ignore-scripts && npm run build && cd ../RearmSyncBranches && npm ci --ignore-scripts && npm run build",
         "package": "tfx extension create --manifest-globs vss-extension.json"
     },
     "devDependencies": {

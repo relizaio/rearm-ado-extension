@@ -1,16 +1,25 @@
 # ReARM CLI Tasks for Azure DevOps
 
-This extension provides a pipeline task to download and install the ReARM CLI tool.
+This extension provides pipeline tasks to download and use the ReARM CLI tool.
 
-## Features
+## Tasks
 
-- Downloads the ReARM CLI from CloudFront CDN
+### RearmCliInstall
+
+Downloads and installs the ReARM CLI.
+
+- Downloads from CloudFront CDN
 - Supports both Windows and Linux agents
 - Automatically detects the agent OS and downloads the appropriate binary
-- Sets the `RearmCli` variable for use in subsequent pipeline steps
 - Adds ReARM CLI to PATH
 
+### RearmSyncBranches
+
+Synchronizes repository branches with ReARM.
+
 ## Usage
+
+### Install ReARM CLI
 
 ```yaml
 steps:
@@ -19,21 +28,42 @@ steps:
       rearmCliVersion: '25.10.10'
 
   - script: |
-      $(RearmCli) --version
+      rearm --version
     displayName: 'Run ReARM CLI'
 ```
 
-## Task Inputs
+### Sync Branches
+
+```yaml
+steps:
+  - task: RearmCliInstall@0
+    inputs:
+      rearmCliVersion: '25.10.10'
+
+  - task: RearmSyncBranches@0
+    inputs:
+      rearmApiKey: '$(REARM_API_KEY)'
+      rearmApiKeyId: '$(REARM_API_KEY_ID)'
+      rearmUrl: 'https://your-rearm-server.com'
+      repoPath: '.'
+```
+
+## Task Reference
+
+### RearmCliInstall Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `rearmCliVersion` | No | `25.10.10` | Version of the ReARM CLI to install |
 
-## Task Outputs
+### RearmSyncBranches Inputs
 
-| Variable | Description |
-|----------|-------------|
-| `RearmCli` | Full path to the ReARM CLI executable |
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `rearmApiKey` | Yes | - | API Key for ReARM authentication |
+| `rearmApiKeyId` | Yes | - | API Key ID for ReARM authentication |
+| `rearmUrl` | Yes | - | ReARM server URL |
+| `repoPath` | No | `.` | Path to the repository |
 
 ## Support
 

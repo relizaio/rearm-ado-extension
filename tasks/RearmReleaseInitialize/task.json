@@ -1,9 +1,9 @@
 {
     "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
     "id": "b2c3d4e5-f6a7-4890-bcde-f12345678901",
-    "name": "RearmSyncBranches",
-    "friendlyName": "ReARM Sync Branches",
-    "description": "Synchronizes branches with ReARM",
+    "name": "RearmReleaseInitialize",
+    "friendlyName": "ReARM Release Initialize",
+    "description": "Synchronizes branches, checks for changes, and initializes a pending release with ReARM",
     "helpMarkDown": "[Learn more about this task](https://github.com/relizaio/rearm-ado-extension)",
     "category": "Utility",
     "author": "Reliza Incorporated",
@@ -12,7 +12,7 @@
         "Minor": 2,
         "Patch": 0
     },
-    "instanceNameFormat": "Sync Branches with ReARM",
+    "instanceNameFormat": "Initialize Release with ReARM",
     "inputs": [
         {
             "name": "rearmApiKey",
@@ -42,6 +42,30 @@
             "defaultValue": ".",
             "required": false,
             "helpMarkDown": "Path to the repository (default: current directory)"
+        },
+        {
+            "name": "branch",
+            "type": "string",
+            "label": "Branch",
+            "required": false,
+            "helpMarkDown": "Branch name (defaults to current branch from Build.SourceBranchName)"
+        },
+        {
+            "name": "version",
+            "type": "string",
+            "label": "Version",
+            "required": true,
+            "helpMarkDown": "Version string for the release (e.g., from GitVersion)"
+        }
+    ],
+    "outputVariables": [
+        {
+            "name": "DoBuild",
+            "description": "Whether a build should be performed (true/false)"
+        },
+        {
+            "name": "LastCommit",
+            "description": "The last commit from the previous release"
         }
     ],
     "execution": {

@@ -1,7 +1,7 @@
 {
-    "name": "rearm-sync-branches-task",
+    "name": "rearm-release-initialize-task",
     "version": "0.2.0",
-    "description": "Azure DevOps task to sync branches with ReARM",
+    "description": "Azure DevOps task to initialize releases with ReARM",
     "main": "index.js",
     "scripts": {
         "build": "tsc"

@@ -28,7 +28,7 @@
             "path": "tasks/RearmCliInstall"
         },
         {
-            "path": "tasks/RearmSyncBranches"
+            "path": "tasks/RearmReleaseInitialize"
         }
     ],
     "contributions": [
@@ -43,13 +43,13 @@
             }
         },
         {
-            "id": "rearm-sync-branches",
+            "id": "rearm-release-initialize",
             "type": "ms.vss-distributed-task.task",
             "targets": [
                 "ms.vss-distributed-task.tasks"
             ],
             "properties": {
-                "name": "tasks/RearmSyncBranches"
+                "name": "tasks/RearmReleaseInitialize"
             }
         }
     ],

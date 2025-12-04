@@ -9,7 +9,7 @@
     "author": "Reliza Incorporated",
     "version": {
         "Major": 0,
-        "Minor": 2,
+        "Minor": 3,
         "Patch": 0
     },
     "instanceNameFormat": "Install Rearm CLI $(rearmCliVersion)",

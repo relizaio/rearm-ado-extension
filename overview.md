@@ -17,6 +17,15 @@ Downloads and installs the ReARM CLI.
 
 Synchronizes branches, checks for changes since last release, and initializes a pending release with ReARM. Sets `DO_BUILD` variable to indicate if a build is needed.
 
+### RearmReleaseFinalize
+
+Finalizes a release in ReARM with deliverable metadata, artifacts, and runs the release finalizer. Supports:
+- Deliverable metadata (container images, binaries, etc.)
+- Source code entry artifacts (SCE artifacts)
+- Release artifacts (release notes, security reports)
+- Deliverable artifacts (SBOMs, attestations)
+- Automatic release finalization
+
 ## Usage
 
 ### Install ReARM CLI
@@ -54,6 +63,39 @@ steps:
     displayName: 'Build (only if changes detected)'
 ```
 
+### Finalize Release
+
+```yaml
+steps:
+  - task: RearmCliInstall@0
+    inputs:
+      rearmCliVersion: '25.10.10'
+
+  - task: RearmReleaseInitialize@0
+    inputs:
+      rearmApiKey: '$(REARM_API_KEY)'
+      rearmApiKeyId: '$(REARM_API_KEY_ID)'
+      rearmUrl: 'https://your-rearm-server.com'
+      version: '$(GitVersion.SemVer)'
+
+  # ... your build steps ...
+
+  - task: RearmReleaseFinalize@0
+    inputs:
+      rearmApiKey: '$(REARM_API_KEY)'
+      rearmApiKeyId: '$(REARM_API_KEY_ID)'
+      rearmUrl: 'https://your-rearm-server.com'
+      version: '$(GitVersion.SemVer)'
+      lifecycle: 'ASSEMBLED'
+      odelId: 'myregistry.azurecr.io/myapp'
+      odelType: 'CONTAINER'
+      odelDigests: '$(DOCKER_SHA_256)'
+      odelPurl: 'pkg:oci/myapp@sha256:abc123'
+      odelArtsJson: '[{"bomFormat":"CYCLONEDX","type":"BOM","filePath":"./sbom.json"}]'
+      sceArts: '[{"bomFormat":"CYCLONEDX","type":"BOM","filePath":"./source-sbom.json"}]'
+      releaseArts: '[{"displayIdentifier":"release-notes","type":"RELEASE_NOTES","storedIn":"REARM","filePath":"./CHANGELOG.md"}]'
+```
+
 ## Task Reference
 
 ### RearmCliInstall Inputs
@@ -79,6 +121,28 @@ steps:
 |----------|-------------|
 | `DO_BUILD` | Whether a build should be performed (`true`/`false`) |
 | `LAST_COMMIT` | The last commit from the previous release |
+
+### RearmReleaseFinalize Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `rearmApiKey` | Yes | - | API Key for ReARM authentication |
+| `rearmApiKeyId` | Yes | - | API Key ID for ReARM authentication |
+| `rearmUrl` | Yes | - | ReARM server URL |
+| `repoPath` | No | `.` | Path to the repository |
+| `version` | Yes | - | Version string for the release |
+| `lifecycle` | No | `ASSEMBLED` | Release lifecycle (ASSEMBLED, DRAFT, REJECTED) |
+| `odelId` | No | - | Deliverable identifier (e.g., container image name) |
+| `odelType` | No | - | Deliverable type (CONTAINER, APPLICATION, LIBRARY, etc.) |
+| `odelDigests` | No | - | Deliverable digests (e.g., sha256:abc123) |
+| `odelPurl` | No | - | Package URL (PURL) for the deliverable |
+| `odelBuildId` | No | Azure build number | Build ID for the deliverable |
+| `odelBuildUri` | No | Azure build URI | URI of the build |
+| `odelCiMeta` | No | `azuredevops` | CI system metadata |
+| `odelArtsJson` | No | - | JSON array of deliverable artifacts |
+| `sceArts` | No | - | JSON array of source code entry artifacts |
+| `releaseArts` | No | - | JSON array of release artifacts |
+| `runOnCondition` | No | `true` | Only run if DO_BUILD is true |
 
 ## Support
 

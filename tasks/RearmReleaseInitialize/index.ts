@@ -110,6 +110,10 @@ async function run(): Promise<void> {
         tl.setVariable('LAST_COMMIT', lastCommit);
         tl.setVariable('LastCommit', lastCommit, false, true);
         
+        // Set BUILD_START for use in finalize task
+        const buildStart = new Date().toISOString();
+        tl.setVariable('BUILD_START', buildStart);
+        
         // Step 3: If build is needed, create pending release; otherwise mark as rejected
         if (doBuild) {
             console.log('Initializing pending release...');

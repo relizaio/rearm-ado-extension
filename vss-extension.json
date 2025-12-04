@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "rearm-cli-tasks",
     "name": "ReARM CLI Tasks",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "publisher": "Reliza",
     "targets": [
         {
@@ -10,11 +10,18 @@
         }
     ],
     "description": "Azure DevOps extension to download and setup ReARM CLI",
+    "public": true,
+    "galleryFlags": ["Public"],
     "categories": [
         "Azure Pipelines"
     ],
     "icons": {
         "default": "images/icon.png"
+    },
+    "content": {
+        "details": {
+            "path": "overview.md"
+        }
     },
     "files": [
         {

@@ -38,7 +38,7 @@ Finalizes a release in ReARM with deliverable metadata, artifacts, and runs the 
 steps:
   - task: RearmCliInstall@0
     inputs:
-      rearmCliVersion: '25.10.10'
+      rearmCliVersion: '25.12.0'
 
   - script: |
       rearm --version
@@ -51,7 +51,7 @@ steps:
 steps:
   - task: RearmCliInstall@0
     inputs:
-      rearmCliVersion: '25.10.10'
+      rearmCliVersion: '25.12.0'
 
   - task: RearmReleaseInitialize@0
     inputs:
@@ -75,7 +75,7 @@ steps:
 steps:
   - task: RearmCliInstall@0
     inputs:
-      rearmCliVersion: '25.10.10'
+      rearmCliVersion: '25.12.0'
 
   - task: RearmReleaseInitialize@0
     inputs:
@@ -106,7 +106,7 @@ steps:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | No | `25.10.10` | Version of the ReARM CLI to install |
+| `rearmCliVersion` | No | `25.12.0` | Version of the ReARM CLI to install |
 
 ### RearmReleaseInitialize Inputs
 

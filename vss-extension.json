@@ -9,7 +9,7 @@
             "id": "Microsoft.VisualStudio.Services"
         }
     ],
-    "description": "Azure DevOps extension to download and setup ReARM CLI",
+    "description": "Azure DevOps extension to download and setup ReARM CLI and submit build artifacts and metadata to ReARM",
     "public": true,
     "galleryFlags": ["Public"],
     "categories": [

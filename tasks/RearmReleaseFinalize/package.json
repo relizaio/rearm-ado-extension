@@ -1,6 +1,6 @@
 {
     "name": "rearm-release-finalize-task",
-    "version": "0.4.6",
+    "version": "0.4.7",
     "description": "Azure DevOps task to finalize releases with ReARM",
     "main": "index.js",
     "scripts": {

@@ -41,12 +41,27 @@ async function run(): Promise<void> {
         console.log('Synchronizing branches with ReARM...');
         let liveBranches: string;
         try {
-            const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
+            // Use git ls-remote to get actual remote branches (works in shallow/detached checkouts)
+            const result = spawnSync('git', ['ls-remote', '--heads', 'origin'], {
                 encoding: 'utf-8',
                 cwd: repoPath
             });
-            const gitOutput = result.stdout || '';
-            liveBranches = Buffer.from(gitOutput).toString('base64').replace(/\n/g, '');
+            const lsRemoteOutput = result.stdout || '';
+            // Convert ls-remote output (hash\trefs/heads/branch) to refs/remotes/origin/branch format
+            const branches = lsRemoteOutput
+                .split('\n')
+                .filter(line => line.trim())
+                .map(line => {
+                    const parts = line.split('\t');
+                    if (parts.length >= 2) {
+                        // Convert refs/heads/main to refs/remotes/origin/main
+                        return parts[1].replace('refs/heads/', 'refs/remotes/origin/');
+                    }
+                    return '';
+                })
+                .filter(ref => ref)
+                .join('\n');
+            liveBranches = Buffer.from(branches).toString('base64').replace(/\n/g, '');
         } catch (err) {
             throw new Error(`Failed to get git branches: ${err}`);
         }

@@ -87,11 +87,11 @@ async function run(): Promise<void> {
         
         // Get commit message and date
         try {
-            const commitMessage = execSync("git log -1 --pretty='%s'", {
+            const commitMessage = execSync("git log -1 --pretty=%s", {
                 encoding: 'utf-8',
                 cwd: repoPath
             }).trim();
-            const commitDate = execSync("git log -1 --date=iso-strict --pretty='%ad'", {
+            const commitDate = execSync("git log -1 --date=iso-strict --pretty=%ad", {
                 encoding: 'utf-8',
                 cwd: repoPath
             }).trim();
@@ -112,13 +112,13 @@ async function run(): Promise<void> {
             if (lastCommit && lastCommit !== 'null') {
                 // Get commits since last release
                 commitsOutput = execSync(
-                    `git log -100 ${lastCommit}..${commit} --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' -- ./`,
+                    `git log -100 ${lastCommit}..${commit} --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae -- ./`,
                     { encoding: 'utf-8', cwd: repoPath }
                 );
             } else {
                 // No last commit available, use current commit only
                 commitsOutput = execSync(
-                    `git log -1 --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae'`,
+                    `git log -1 --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae`,
                     { encoding: 'utf-8', cwd: repoPath }
                 );
             }

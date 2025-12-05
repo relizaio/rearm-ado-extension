@@ -129,11 +129,11 @@ async function run(): Promise<void> {
             let commitMessage = '';
             let commitDate = '';
             try {
-                commitMessage = execSync("git log -1 --pretty='%s'", {
+                commitMessage = execSync("git log -1 --pretty=%s", {
                     encoding: 'utf-8',
                     cwd: repoPath
                 }).trim();
-                commitDate = execSync("git log -1 --date=iso-strict --pretty='%ad'", {
+                commitDate = execSync("git log -1 --date=iso-strict --pretty=%ad", {
                     encoding: 'utf-8',
                     cwd: repoPath
                 }).trim();
@@ -147,12 +147,12 @@ async function run(): Promise<void> {
                 let commitsOutput: string;
                 if (lastCommit && lastCommit !== 'null') {
                     commitsOutput = execSync(
-                        `git log ${lastCommit}..${commit} --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae' -- ./`,
+                        `git log ${lastCommit}..${commit} --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae -- ./`,
                         { encoding: 'utf-8', cwd: repoPath }
                     );
                 } else {
                     commitsOutput = execSync(
-                        `git log -1 --date=iso-strict --pretty='%H|||%ad|||%s|||%an|||%ae'`,
+                        `git log -1 --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae`,
                         { encoding: 'utf-8', cwd: repoPath }
                     );
                 }

@@ -2,6 +2,8 @@
 
 Azure DevOps extension that provides a pipeline task to download and install the Rearm CLI.
 
+Listing on Azure DevOps Marketplace is [here](https://marketplace.visualstudio.com/items?itemName=Reliza.rearm-cli-tasks).
+
 ## Features
 
 - Downloads the Rearm CLI from CloudFront CDN

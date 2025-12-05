@@ -222,22 +222,26 @@ async function run(): Promise<void> {
                     getVersion.arg(['--commits', commitsBase64]);
                 }
                 
-                const execOptions: any = {
-                    listeners: {
-                        stdout: (data: Buffer) => {
-                            getVersionOutput += data.toString();
-                        }
-                    }
-                };
+                // Execute using spawnSync to reliably capture output
+                const result = spawnSync(rearmPath, (getVersion as any).args, {
+                    encoding: 'utf-8',
+                    cwd: repoPath
+                });
                 
-                const getVersionResult = await getVersion.execAsync(execOptions);
-                if (getVersionResult !== 0) {
-                    throw new Error(`ReARM getversion failed with exit code ${getVersionResult}`);
+                getVersionOutput = (result.stdout || '') + (result.stderr || '');
+                console.log(`ReARM getversion output: ${getVersionOutput}`);
+                
+                if (result.status !== 0) {
+                    throw new Error(`ReARM getversion failed with exit code ${result.status}: ${getVersionOutput}`);
                 }
                 
-                // Parse version from JSON response
+                // Parse version from JSON response - find JSON object in output
                 try {
-                    const versionData = JSON.parse(getVersionOutput.trim());
+                    const jsonMatch = getVersionOutput.match(/\{[^{}]*"version"[^{}]*\}/);
+                    if (!jsonMatch) {
+                        throw new Error('No JSON found in output');
+                    }
+                    const versionData = JSON.parse(jsonMatch[0]);
                     fullVersion = versionData.version || '';
                     shortVersion = versionData.dockerTagSafeVersion || fullVersion;
                     console.log(`Got version from ReARM: ${fullVersion}`);

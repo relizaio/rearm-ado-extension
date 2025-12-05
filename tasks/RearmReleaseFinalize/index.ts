@@ -154,18 +154,24 @@ async function run(): Promise<void> {
                 addRelease.arg(['--odelcimeta', odelCiMeta]);
             }
             if (odelArtsJson) {
-                addRelease.arg(['--odelartsjson', odelArtsJson]);
+                // Normalize Windows backslashes to forward slashes in JSON paths
+                const normalizedArtsJson = odelArtsJson.replace(/\\\\/g, '/').replace(/\\/g, '/');
+                addRelease.arg(['--odelartsjson', normalizedArtsJson]);
             }
         }
         
         // Add source code entry artifacts
         if (sceArts) {
-            addRelease.arg(['--scearts', sceArts]);
+            // Normalize Windows backslashes to forward slashes in JSON paths
+            const normalizedSceArts = sceArts.replace(/\\\\/g, '/').replace(/\\/g, '/');
+            addRelease.arg(['--scearts', normalizedSceArts]);
         }
         
         // Add release artifacts
         if (releaseArts) {
-            addRelease.arg(['--releasearts', releaseArts]);
+            // Normalize Windows backslashes to forward slashes in JSON paths
+            const normalizedReleaseArts = releaseArts.replace(/\\\\/g, '/').replace(/\\/g, '/');
+            addRelease.arg(['--releasearts', normalizedReleaseArts]);
         }
         
         // Add build timing

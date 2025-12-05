@@ -1,5 +1,5 @@
 import * as tl from 'azure-pipelines-task-lib/task';
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 async function run(): Promise<void> {
     try {
@@ -87,14 +87,16 @@ async function run(): Promise<void> {
         
         // Get commit message and date
         try {
-            const commitMessage = execSync("git log -1 --pretty=%s", {
+            const msgResult = spawnSync('git', ['log', '-1', '--pretty=%s'], {
                 encoding: 'utf-8',
                 cwd: repoPath
-            }).trim();
-            const commitDate = execSync("git log -1 --date=iso-strict --pretty=%ad", {
+            });
+            const commitMessage = (msgResult.stdout || '').trim();
+            const dateResult = spawnSync('git', ['log', '-1', '--date=iso-strict', '--pretty=%ad'], {
                 encoding: 'utf-8',
                 cwd: repoPath
-            }).trim();
+            });
+            const commitDate = (dateResult.stdout || '').trim();
             
             if (commitMessage) {
                 addRelease.arg(['--commitmessage', commitMessage]);

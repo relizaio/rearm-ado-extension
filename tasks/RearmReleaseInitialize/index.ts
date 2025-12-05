@@ -1,5 +1,5 @@
 import * as tl from 'azure-pipelines-task-lib/task';
-import { execSync, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 async function run(): Promise<void> {
     try {
@@ -41,10 +41,11 @@ async function run(): Promise<void> {
         console.log('Synchronizing branches with ReARM...');
         let liveBranches: string;
         try {
-            const gitOutput = execSync('git branch -r --format="%(refname)"', {
+            const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
                 encoding: 'utf-8',
                 cwd: repoPath
             });
+            const gitOutput = result.stdout || '';
             liveBranches = Buffer.from(gitOutput).toString('base64').replace(/\n/g, '');
         } catch (err) {
             throw new Error(`Failed to get git branches: ${err}`);
@@ -71,12 +72,17 @@ async function run(): Promise<void> {
         let lastCommit = '';
         
         try {
-            const getLatestCmd = `"${rearmPath}" getlatestrelease -k "${rearmApiKey}" -i "${rearmApiKeyId}" -u "${rearmUrl}" --vcsuri "${vcsUri}" --repo-path "${repoPath}" --branch "${branch}"`;
-            const latestReleaseOutput = execSync(getLatestCmd, {
-                encoding: 'utf-8',
-                cwd: repoPath
-            });
+            const getLatestResult = spawnSync(rearmPath, [
+                'getlatestrelease',
+                '-k', rearmApiKey,
+                '-i', rearmApiKeyId,
+                '-u', rearmUrl,
+                '--vcsuri', vcsUri,
+                '--repo-path', repoPath,
+                '--branch', branch
+            ], { encoding: 'utf-8', cwd: repoPath });
             
+            const latestReleaseOutput = getLatestResult.stdout || '';
             const releaseData = JSON.parse(latestReleaseOutput);
             lastCommit = releaseData?.sourceCodeEntryDetails?.commit || '';
             console.log(`Last Commit: ${lastCommit}`);
@@ -84,10 +90,10 @@ async function run(): Promise<void> {
             if (lastCommit && lastCommit !== 'null') {
                 // Check for diff
                 try {
-                    const diffOutput = execSync(`git diff ${lastCommit}..${commit} ${repoPath}`, {
-                        encoding: 'utf-8',
-                        cwd: repoPath
-                    });
+                    const diffResult = spawnSync('git', [
+                        'diff', `${lastCommit}..${commit}`, repoPath
+                    ], { encoding: 'utf-8', cwd: repoPath });
+                    const diffOutput = diffResult.stdout || '';
                     const diffLines = diffOutput.split('\n').length;
                     if (diffLines > 0 && diffOutput.trim() !== '') {
                         doBuild = true;
@@ -129,14 +135,16 @@ async function run(): Promise<void> {
             let commitMessage = '';
             let commitDate = '';
             try {
-                commitMessage = execSync("git log -1 --pretty=%s", {
+                const msgResult = spawnSync('git', ['log', '-1', '--pretty=%s'], {
                     encoding: 'utf-8',
                     cwd: repoPath
-                }).trim();
-                commitDate = execSync("git log -1 --date=iso-strict --pretty=%ad", {
+                });
+                commitMessage = (msgResult.stdout || '').trim();
+                const dateResult = spawnSync('git', ['log', '-1', '--date=iso-strict', '--pretty=%ad'], {
                     encoding: 'utf-8',
                     cwd: repoPath
-                }).trim();
+                });
+                commitDate = (dateResult.stdout || '').trim();
             } catch (err) {
                 console.log('Warning: Could not get commit details');
             }

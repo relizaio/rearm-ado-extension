@@ -41,27 +41,63 @@ async function run(): Promise<void> {
         console.log('Synchronizing branches with ReARM...');
         let liveBranches: string;
         try {
-            // Use git ls-remote to get actual remote branches (works in shallow/detached checkouts)
-            const result = spawnSync('git', ['ls-remote', '--heads', 'origin'], {
+            let branches = '';
+            
+            // First try git ls-remote (works best on Linux)
+            const lsRemoteResult = spawnSync('git', ['ls-remote', '--heads', 'origin'], {
                 encoding: 'utf-8',
                 cwd: repoPath
             });
-            const lsRemoteOutput = result.stdout || '';
-            // Convert ls-remote output (hash\trefs/heads/branch) to refs/remotes/origin/branch format
-            const branches = lsRemoteOutput
-                .split('\n')
-                .filter(line => line.trim())
-                .map(line => {
-                    const parts = line.split('\t');
-                    if (parts.length >= 2) {
-                        // Convert refs/heads/main to refs/remotes/origin/main
-                        return parts[1].replace('refs/heads/', 'refs/remotes/origin/');
-                    }
-                    return '';
-                })
-                .filter(ref => ref)
-                .join('\n');
-            liveBranches = Buffer.from(branches).toString('base64').replace(/\n/g, '');
+            const lsRemoteOutput = lsRemoteResult.stdout || '';
+            
+            if (lsRemoteOutput.trim()) {
+                // Convert ls-remote output (hash\trefs/heads/branch) to refs/remotes/origin/branch format
+                branches = lsRemoteOutput
+                    .split('\n')
+                    .filter(line => line.trim())
+                    .map(line => {
+                        const parts = line.split('\t');
+                        if (parts.length >= 2) {
+                            return parts[1].replace('refs/heads/', 'refs/remotes/origin/');
+                        }
+                        return '';
+                    })
+                    .filter(ref => ref)
+                    .join('\n');
+            }
+            
+            // Fallback: use git for-each-ref (works on Windows with cached refs)
+            if (!branches) {
+                const forEachRefResult = spawnSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], {
+                    encoding: 'utf-8',
+                    cwd: repoPath
+                });
+                const forEachRefOutput = forEachRefResult.stdout || '';
+                branches = forEachRefOutput
+                    .split('\n')
+                    .filter(line => line.trim() && !line.includes('/HEAD'))
+                    .join('\n');
+            }
+            
+            // Last fallback: fetch remote refs first, then try again
+            if (!branches) {
+                console.log('Fetching remote refs...');
+                spawnSync('git', ['fetch', 'origin', '--prune'], {
+                    encoding: 'utf-8',
+                    cwd: repoPath
+                });
+                const forEachRefResult = spawnSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], {
+                    encoding: 'utf-8',
+                    cwd: repoPath
+                });
+                branches = (forEachRefResult.stdout || '')
+                    .split('\n')
+                    .filter(line => line.trim() && !line.includes('/HEAD'))
+                    .join('\n');
+            }
+            
+            console.log(`Found branches: ${branches || '(none)'}`);
+            liveBranches = branches ? Buffer.from(branches).toString('base64').replace(/\n/g, '') : '';
         } catch (err) {
             throw new Error(`Failed to get git branches: ${err}`);
         }

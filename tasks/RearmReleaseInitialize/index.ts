@@ -1,5 +1,5 @@
 import * as tl from 'azure-pipelines-task-lib/task';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 async function run(): Promise<void> {
     try {
@@ -146,15 +146,16 @@ async function run(): Promise<void> {
             try {
                 let commitsOutput: string;
                 if (lastCommit && lastCommit !== 'null') {
-                    commitsOutput = execSync(
-                        `git log ${lastCommit}..${commit} --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae -- ./`,
-                        { encoding: 'utf-8', cwd: repoPath }
-                    );
+                    const result = spawnSync('git', [
+                        'log', `${lastCommit}..${commit}`,
+                        '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae', '--', './'
+                    ], { encoding: 'utf-8', cwd: repoPath });
+                    commitsOutput = result.stdout || '';
                 } else {
-                    commitsOutput = execSync(
-                        `git log -1 --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae`,
-                        { encoding: 'utf-8', cwd: repoPath }
-                    );
+                    const result = spawnSync('git', [
+                        'log', '-1', '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae'
+                    ], { encoding: 'utf-8', cwd: repoPath });
+                    commitsOutput = result.stdout || '';
                 }
                 if (commitsOutput.trim()) {
                     commitsBase64 = Buffer.from(commitsOutput).toString('base64');

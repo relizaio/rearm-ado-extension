@@ -111,16 +111,17 @@ async function run(): Promise<void> {
             let commitsOutput: string;
             if (lastCommit && lastCommit !== 'null') {
                 // Get commits since last release
-                commitsOutput = execSync(
-                    `git log -100 ${lastCommit}..${commit} --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae -- ./`,
-                    { encoding: 'utf-8', cwd: repoPath }
-                );
+                const result = spawnSync('git', [
+                    'log', '-100', `${lastCommit}..${commit}`,
+                    '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae', '--', './'
+                ], { encoding: 'utf-8', cwd: repoPath });
+                commitsOutput = result.stdout || '';
             } else {
                 // No last commit available, use current commit only
-                commitsOutput = execSync(
-                    `git log -1 --date=iso-strict --pretty=%H|||%ad|||%s|||%an|||%ae`,
-                    { encoding: 'utf-8', cwd: repoPath }
-                );
+                const result = spawnSync('git', [
+                    'log', '-1', '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae'
+                ], { encoding: 'utf-8', cwd: repoPath });
+                commitsOutput = result.stdout || '';
             }
             if (commitsOutput.trim()) {
                 const commitsBase64 = Buffer.from(commitsOutput).toString('base64');

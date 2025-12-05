@@ -1,5 +1,5 @@
 import * as tl from 'azure-pipelines-task-lib/task';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 async function run(): Promise<void> {
     try {
@@ -176,24 +176,18 @@ async function run(): Promise<void> {
         
         console.log('Sending release metadata to ReARM...');
         
-        // Execute and capture output
-        let rearmOutput = '';
-        const execOptions: any = {
-            listeners: {
-                stdout: (data: Buffer) => {
-                    rearmOutput += data.toString();
-                },
-                stderr: (data: Buffer) => {
-                    rearmOutput += data.toString();
-                }
-            }
-        };
+        // Execute using spawnSync to capture output (execAsync listeners don't work reliably)
+        // We use 'any' cast to access private 'args' property to avoid reconstructing arguments
+        const result = spawnSync(rearmPath, (addRelease as any).args, {
+            encoding: 'utf-8',
+            cwd: repoPath
+        });
         
-        const addResult = await addRelease.execAsync(execOptions);
+        const rearmOutput = (result.stdout || '') + (result.stderr || '');
         console.log(`ReARM output: ${rearmOutput}`);
         
-        if (addResult !== 0) {
-            throw new Error(`ReARM addrelease failed with exit code ${addResult}: ${rearmOutput}`);
+        if (result.status !== 0) {
+            throw new Error(`ReARM addrelease failed with exit code ${result.status}: ${rearmOutput}`);
         }
         
         // If lifecycle is ASSEMBLED, run the finalizer

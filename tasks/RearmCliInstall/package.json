@@ -1,6 +1,6 @@
 {
     "name": "rearm-cli-install-task",
-    "version": "0.3.2",
+    "version": "0.4.0",
     "description": "Azure DevOps task to install Rearm CLI",
     "main": "index.js",
     "scripts": {

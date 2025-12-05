@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "rearm-cli-tasks",
     "name": "ReARM CLI Tasks",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "publisher": "Reliza",
     "targets": [
         {

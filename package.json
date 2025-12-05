@@ -1,6 +1,6 @@
 {
     "name": "rearm-cli-ado-extension",
-    "version": "0.4.5",
+    "version": "0.4.6",
     "description": "Azure DevOps extension for ReARM CLI",
     "scripts": {
         "build": "cd tasks/RearmCliInstall && npm ci --ignore-scripts && npm run build && cd ../RearmReleaseInitialize && npm ci --ignore-scripts && npm run build && cd ../RearmReleaseFinalize && npm ci --ignore-scripts && npm run build",

@@ -1,6 +1,6 @@
 {
     "name": "rearm-release-initialize-task",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "description": "Azure DevOps task to initialize releases with ReARM",
     "main": "index.js",
     "scripts": {

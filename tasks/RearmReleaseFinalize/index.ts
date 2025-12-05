@@ -198,12 +198,26 @@ async function run(): Promise<void> {
         
         // If lifecycle is ASSEMBLED, run the finalizer
         if (lifecycle === 'ASSEMBLED') {
-            // Extract release UUID from output
-            const jsonMatch = rearmOutput.match(/^\{.*\}$/m);
-            if (jsonMatch) {
+            // Extract release UUID from output - find JSON object starting with {"data":
+            const jsonStart = rearmOutput.indexOf('{"data":');
+            let releaseUuid: string | null = null;
+            
+            if (jsonStart !== -1) {
                 try {
-                    const releaseData = JSON.parse(jsonMatch[0]);
-                    const releaseUuid = releaseData?.data?.addReleaseProgrammatic?.uuid;
+                    // Find the matching closing brace
+                    let braceCount = 0;
+                    let jsonEnd = jsonStart;
+                    for (let i = jsonStart; i < rearmOutput.length; i++) {
+                        if (rearmOutput[i] === '{') braceCount++;
+                        if (rearmOutput[i] === '}') braceCount--;
+                        if (braceCount === 0) {
+                            jsonEnd = i + 1;
+                            break;
+                        }
+                    }
+                    const jsonStr = rearmOutput.substring(jsonStart, jsonEnd);
+                    const releaseData = JSON.parse(jsonStr);
+                    releaseUuid = releaseData?.data?.addReleaseProgrammatic?.uuid || null;
                     
                     if (releaseUuid) {
                         console.log(`Finalizing release with UUID: ${releaseUuid}`);
@@ -224,7 +238,7 @@ async function run(): Promise<void> {
                         console.log('Warning: Could not extract release UUID for finalization');
                     }
                 } catch (parseErr) {
-                    console.log('Warning: Could not parse release response for finalization');
+                    console.log(`Warning: Could not parse release response for finalization: ${parseErr}`);
                 }
             } else {
                 console.log('Warning: No JSON response found for finalization');

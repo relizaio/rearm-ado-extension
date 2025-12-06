@@ -61,18 +61,18 @@ async function run(): Promise<void> {
             if (validBranches.length === 0 && lines.length > 0) {
                 // Only detached commit refs found, skip sync
                 console.log('Warning: Only detached commit refs found (shallow/detached checkout). Skipping branch sync.');
-                console.log('To enable branch sync, use persistCredentials: true in your pipeline checkout step.');
+                console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
                 skipBranchSync = true;
             } else if (validBranches.length === 0) {
                 console.log('Warning: No branches found. Skipping branch sync.');
-                console.log('To enable branch sync, use persistCredentials: true in your pipeline checkout step.');
+                console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
                 skipBranchSync = true;
             } else {
                 liveBranches = Buffer.from(validBranches.join('\n')).toString('base64').replace(/\n/g, '');
             }
         } catch (err) {
             console.log(`Warning: Failed to get git branches: ${err}. Skipping branch sync.`);
-            console.log(`Make sure you use persistCredentials: true in your pipeline checkout step.`);
+            console.log(`Make sure you use fetchDepth: 0 in your pipeline checkout step.`);
             skipBranchSync = true;
         }
         

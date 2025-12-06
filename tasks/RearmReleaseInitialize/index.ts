@@ -37,107 +37,39 @@ async function run(): Promise<void> {
         // Find rearm in PATH
         const rearmPath = tl.which('rearm', true);
         
-        // Step 1: Sync branches
-        console.log('Synchronizing branches with ReARM...');
-        let liveBranches: string;
-        
-        // Helper to filter out detached HEAD refs (commit hashes) and keep only named branches
-        const isValidBranchRef = (ref: string): boolean => {
-            if (!ref || ref.includes('/HEAD')) return false;
-            // Extract the branch name part after refs/remotes/origin/
-            const branchName = ref.replace('refs/remotes/origin/', '');
-            // Filter out refs that look like commit hashes (40 hex chars)
-            if (/^[0-9a-f]{40}$/i.test(branchName)) return false;
-            return true;
-        };
-        
-        try {
-            let branches = '';
-            
-            // First try git ls-remote (works best on Linux)
-            console.log('Trying git ls-remote...');
-            const lsRemoteResult = spawnSync('git', ['ls-remote', '--heads', 'origin'], {
-                encoding: 'utf-8',
-                cwd: repoPath
-            });
-            const lsRemoteOutput = lsRemoteResult.stdout || '';
-            console.log(`ls-remote output: ${lsRemoteOutput || '(empty)'}`);
-            
-            if (lsRemoteOutput.trim()) {
-                // Convert ls-remote output (hash\trefs/heads/branch) to refs/remotes/origin/branch format
-                branches = lsRemoteOutput
-                    .split('\n')
-                    .filter(line => line.trim())
-                    .map(line => {
-                        const parts = line.split('\t');
-                        if (parts.length >= 2) {
-                            return parts[1].replace('refs/heads/', 'refs/remotes/origin/');
-                        }
-                        return '';
-                    })
-                    .filter(ref => isValidBranchRef(ref))
-                    .join('\n');
-            }
-            console.log(`After ls-remote, branches: ${branches || '(none)'}`);
-            
-            // Fallback: use git for-each-ref (works on Windows with cached refs)
-            if (!branches) {
-                console.log('Trying git for-each-ref...');
-                const forEachRefResult = spawnSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], {
+        // Step 1: Sync branches (skip on Windows due to git auth limitations)
+        const isWindows = process.platform === 'win32';
+        if (isWindows) {
+            console.log('Skipping branch sync on Windows (git auth not available in pipeline)');
+        } else {
+            console.log('Synchronizing branches with ReARM...');
+            let liveBranches: string;
+            try {
+                const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
                     encoding: 'utf-8',
                     cwd: repoPath
                 });
-                const forEachRefOutput = forEachRefResult.stdout || '';
-                console.log(`for-each-ref output: ${forEachRefOutput || '(empty)'}`);
-                branches = forEachRefOutput
-                    .split('\n')
-                    .filter(ref => isValidBranchRef(ref))
-                    .join('\n');
-                console.log(`After for-each-ref, branches: ${branches || '(none)'}`);
+                const gitOutput = result.stdout || '';
+                liveBranches = Buffer.from(gitOutput).toString('base64').replace(/\n/g, '');
+            } catch (err) {
+                throw new Error(`Failed to get git branches: ${err}`);
             }
             
-            // Last fallback: fetch remote refs first, then try again
-            if (!branches) {
-                console.log('Fetching remote refs...');
-                const fetchResult = spawnSync('git', ['fetch', 'origin', '--prune'], {
-                    encoding: 'utf-8',
-                    cwd: repoPath
-                });
-                console.log(`fetch stdout: ${fetchResult.stdout || '(empty)'}`);
-                console.log(`fetch stderr: ${fetchResult.stderr || '(empty)'}`);
-                
-                const forEachRefResult = spawnSync('git', ['for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], {
-                    encoding: 'utf-8',
-                    cwd: repoPath
-                });
-                console.log(`for-each-ref after fetch output: ${forEachRefResult.stdout || '(empty)'}`);
-                branches = (forEachRefResult.stdout || '')
-                    .split('\n')
-                    .filter(ref => isValidBranchRef(ref))
-                    .join('\n');
-                console.log(`After fetch + for-each-ref, branches: ${branches || '(none)'}`);
-            }
+            const syncBranches = tl.tool(rearmPath);
+            syncBranches.arg('syncbranches');
+            syncBranches.arg(['-k', rearmApiKey]);
+            syncBranches.arg(['-i', rearmApiKeyId]);
+            syncBranches.arg(['-u', rearmUrl]);
+            syncBranches.arg(['--vcsuri', vcsUri]);
+            syncBranches.arg(['--repo-path', repoPath]);
+            syncBranches.arg(['--livebranches', liveBranches]);
             
-            console.log(`Final branches: ${branches || '(none)'}`);
-            liveBranches = branches ? Buffer.from(branches).toString('base64').replace(/\n/g, '') : '';
-        } catch (err) {
-            throw new Error(`Failed to get git branches: ${err}`);
+            const syncResult = await syncBranches.execAsync();
+            if (syncResult !== 0) {
+                throw new Error(`ReARM syncbranches failed with exit code ${syncResult}`);
+            }
+            console.log('Branches synchronized successfully');
         }
-        
-        const syncBranches = tl.tool(rearmPath);
-        syncBranches.arg('syncbranches');
-        syncBranches.arg(['-k', rearmApiKey]);
-        syncBranches.arg(['-i', rearmApiKeyId]);
-        syncBranches.arg(['-u', rearmUrl]);
-        syncBranches.arg(['--vcsuri', vcsUri]);
-        syncBranches.arg(['--repo-path', repoPath]);
-        syncBranches.arg(['--livebranches', liveBranches]);
-        
-        const syncResult = await syncBranches.execAsync();
-        if (syncResult !== 0) {
-            throw new Error(`ReARM syncbranches failed with exit code ${syncResult}`);
-        }
-        console.log('Branches synchronized successfully');
         
         // Step 2: Get latest release and check if build is needed
         console.log('Checking for changes since last release...');

@@ -2,6 +2,22 @@
 
 This extension provides pipeline tasks to download and use the ReARM CLI tool.
 
+## Prerequisites
+
+For full functionality (branch synchronization and change detection), configure your pipeline checkout step with:
+
+```yaml
+steps:
+  - checkout: self
+    fetchDepth: 0
+    persistCredentials: true
+```
+
+- **fetchDepth: 0** - Fetches full git history, required for accurate change detection between releases
+- **persistCredentials: true** - Keeps git credentials available, required for branch synchronization. This is required for Windows runners.
+
+Without these settings, the tasks will still work but branch sync will be skipped and builds will always be triggered. Note, that on Linux runners `persistCredentials: true` is not required.
+
 ## Tasks
 
 ### RearmCliInstall

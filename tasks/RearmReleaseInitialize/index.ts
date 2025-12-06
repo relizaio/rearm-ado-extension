@@ -37,24 +37,46 @@ async function run(): Promise<void> {
         // Find rearm in PATH
         const rearmPath = tl.which('rearm', true);
         
-        // Step 1: Sync branches (skip on Windows due to git auth limitations)
-        const isWindows = process.platform === 'win32';
-        if (isWindows) {
-            console.log('Skipping branch sync on Windows (git auth not available in pipeline)');
-        } else {
-            console.log('Synchronizing branches with ReARM...');
-            let liveBranches: string;
-            try {
-                const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
-                    encoding: 'utf-8',
-                    cwd: repoPath
-                });
-                const gitOutput = result.stdout || '';
-                liveBranches = Buffer.from(gitOutput).toString('base64').replace(/\n/g, '');
-            } catch (err) {
-                throw new Error(`Failed to get git branches: ${err}`);
-            }
+        // Step 1: Sync branches
+        console.log('Synchronizing branches with ReARM...');
+        let liveBranches: string = '';
+        let skipBranchSync = false;
+        
+        try {
+            const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
+                encoding: 'utf-8',
+                cwd: repoPath
+            });
+            const gitOutput = (result.stdout || '').trim();
+            console.log(`Git branch output: ${gitOutput || '(empty)'}`);
             
+            // Check if output looks like valid branch refs or just a detached commit hash
+            const lines = gitOutput.split('\n').filter(line => line.trim());
+            const validBranches = lines.filter(line => {
+                // Valid branch refs should not end with a 40-char hex commit hash
+                const branchName = line.replace('refs/remotes/origin/', '');
+                return !/^[0-9a-f]{40}$/i.test(branchName);
+            });
+            
+            if (validBranches.length === 0 && lines.length > 0) {
+                // Only detached commit refs found, skip sync
+                console.log('Warning: Only detached commit refs found (shallow/detached checkout). Skipping branch sync.');
+                console.log('To enable branch sync, use persistCredentials: true in your pipeline checkout step.');
+                skipBranchSync = true;
+            } else if (validBranches.length === 0) {
+                console.log('Warning: No branches found. Skipping branch sync.');
+                console.log('To enable branch sync, use persistCredentials: true in your pipeline checkout step.');
+                skipBranchSync = true;
+            } else {
+                liveBranches = Buffer.from(validBranches.join('\n')).toString('base64').replace(/\n/g, '');
+            }
+        } catch (err) {
+            console.log(`Warning: Failed to get git branches: ${err}. Skipping branch sync.`);
+            console.log(`Make sure you use persistCredentials: true in your pipeline checkout step.`);
+            skipBranchSync = true;
+        }
+        
+        if (!skipBranchSync) {
             const syncBranches = tl.tool(rearmPath);
             syncBranches.arg('syncbranches');
             syncBranches.arg(['-k', rearmApiKey]);
@@ -101,7 +123,7 @@ async function run(): Promise<void> {
                 const commitExists = commitExistsResult.status === 0;
                 
                 if (!commitExists) {
-                    console.log(`Last commit ${lastCommit} not available locally (shallow checkout), assuming build is needed`);
+                    console.log(`Last commit ${lastCommit} not available locally (shallow checkout), assuming build is needed. Make sure to use fetchDepth: 0 in your pipeline checkout step to avoid shallow clone.`);
                     doBuild = true;
                 } else {
                     // Check for diff

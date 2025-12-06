@@ -93,20 +93,31 @@ async function run(): Promise<void> {
             console.log(`Last Commit: ${lastCommit}`);
             
             if (lastCommit && lastCommit !== 'null') {
-                // Check for diff
-                try {
-                    const diffResult = spawnSync('git', [
-                        'diff', `${lastCommit}..${commit}`, repoPath
-                    ], { encoding: 'utf-8', cwd: repoPath });
-                    const diffOutput = diffResult.stdout || '';
-                    const diffLines = diffOutput.split('\n').length;
-                    if (diffLines > 0 && diffOutput.trim() !== '') {
+                // Check if lastCommit exists locally (may not in shallow checkout)
+                const commitExistsResult = spawnSync('git', ['cat-file', '-t', lastCommit], {
+                    encoding: 'utf-8',
+                    cwd: repoPath
+                });
+                const commitExists = commitExistsResult.status === 0;
+                
+                if (!commitExists) {
+                    console.log(`Last commit ${lastCommit} not available locally (shallow checkout), assuming build is needed`);
+                    doBuild = true;
+                } else {
+                    // Check for diff
+                    try {
+                        const diffResult = spawnSync('git', [
+                            'diff', `${lastCommit}..${commit}`, '--', './'
+                        ], { encoding: 'utf-8', cwd: repoPath });
+                        const diffOutput = diffResult.stdout || '';
+                        if (diffOutput.trim() !== '') {
+                            doBuild = true;
+                        }
+                    } catch (diffErr) {
+                        // If diff fails, do build
+                        console.log('Diff check failed, assuming build is needed');
                         doBuild = true;
                     }
-                } catch (diffErr) {
-                    // If diff fails (e.g., commit not found), do build
-                    console.log('Diff check failed, assuming build is needed');
-                    doBuild = true;
                 }
             } else {
                 doBuild = true;

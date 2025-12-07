@@ -132,6 +132,10 @@ steps:
 | `repoPath` | No | `.` | Path to the repository |
 | `branch` | No | Current branch | Branch name |
 | `version` | No | - | Version string. If not provided, version is obtained from ReARM via getversion. |
+| `createComponent` | No | `false` | Create component if it doesn't exist. Requires organization-wide read-write API key. |
+| `createComponentVersionSchema` | No | `semver` | Version schema for new component (semver, calver_reliza, calver_ubuntu, etc.) |
+| `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for new component |
+| `allowRebuild` | No | `false` | Allow rebuilding release on CI reruns. If true, existing releases will be rebuilt instead of rejected. |
 
 ### RearmReleaseInitialize Outputs
 
@@ -162,6 +166,10 @@ steps:
 | `sceArts` | No | - | JSON array of source code entry artifacts |
 | `releaseArts` | No | - | JSON array of release artifacts |
 | `runOnCondition` | No | `true` | Only run if DO_BUILD is true |
+| `createComponent` | No | `false` | Create component if it doesn't exist. Requires organization-wide read-write API key. |
+| `createComponentVersionSchema` | No | `semver` | Version schema for new component (semver, calver_reliza, calver_ubuntu, etc.) |
+| `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for new component |
+| `allowRebuild` | No | `false` | Allow rebuilding release on CI reruns. If true, existing releases will be rebuilt instead of rejected. |
 
 ## Support
 

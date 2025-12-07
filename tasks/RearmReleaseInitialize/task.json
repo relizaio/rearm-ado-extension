@@ -56,6 +56,30 @@
             "label": "Version",
             "required": false,
             "helpMarkDown": "Version string for the release. If not provided, version will be obtained from ReARM using getversion command."
+        },
+        {
+            "name": "createComponent",
+            "type": "boolean",
+            "label": "Create Component If Not Exists",
+            "defaultValue": "false",
+            "required": false,
+            "helpMarkDown": "Create component if it doesn't exist. Requires organization-wide read-write API key."
+        },
+        {
+            "name": "createComponentVersionSchema",
+            "type": "string",
+            "label": "Version Schema for New Component",
+            "defaultValue": "semver",
+            "required": false,
+            "helpMarkDown": "Version schema for the new component. Only used with createComponent. Supported values: semver, calver_reliza, calver_ubuntu, calver_yy_mm, calver_yyyy_mm, calver_yy_0m, calver_yyyy_0m, or custom per Reliza Versioning."
+        },
+        {
+            "name": "createComponentBranchVersionSchema",
+            "type": "string",
+            "label": "Branch Version Schema for New Component",
+            "defaultValue": "semver",
+            "required": false,
+            "helpMarkDown": "Feature branch version schema for the new component. Only used with createComponent. Same supported values as Version Schema."
         }
     ],
     "outputVariables": [

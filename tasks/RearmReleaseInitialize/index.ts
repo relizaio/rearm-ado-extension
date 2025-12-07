@@ -9,6 +9,9 @@ async function run(): Promise<void> {
         const repoPath = tl.getInput('repoPath', false) || '.';
         const branch = tl.getInput('branch', false) || tl.getVariable('Build.SourceBranchName') || '';
         const versionInput = tl.getInput('version', false) || '';
+        const createComponent = tl.getBoolInput('createComponent', false);
+        const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
+        const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
         
         // Get repository URI and commit from Azure DevOps predefined variables
         const vcsUri = tl.getVariable('Build.Repository.Uri') || '';
@@ -233,6 +236,11 @@ async function run(): Promise<void> {
                 if (commitsBase64) {
                     addRelease.arg(['--commits', commitsBase64]);
                 }
+                if (createComponent) {
+                    addRelease.arg(['--createcomponent', 'true']);
+                    addRelease.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
+                    addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
+                }
                 
                 const addResult = await addRelease.execAsync();
                 if (addResult !== 0) {
@@ -266,6 +274,11 @@ async function run(): Promise<void> {
                 getVersion.arg(['--repo-path', repoPath]);
                 if (commitsBase64) {
                     getVersion.arg(['--commits', commitsBase64]);
+                }
+                if (createComponent) {
+                    getVersion.arg(['--createcomponent', 'true']);
+                    getVersion.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
+                    getVersion.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
                 }
                 
                 // Execute using spawnSync to reliably capture output

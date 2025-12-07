@@ -42,6 +42,11 @@ async function run(): Promise<void> {
         const sceArts = tl.getInput('sceArts', false);
         const releaseArts = tl.getInput('releaseArts', false);
         
+        // Create component options
+        const createComponent = tl.getBoolInput('createComponent', false);
+        const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
+        const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
+        
                 
         // Get repository URI and commit from Azure DevOps predefined variables
         const vcsUri = tl.getVariable('Build.Repository.Uri') || '';
@@ -182,6 +187,13 @@ async function run(): Promise<void> {
         }
         const dateEnd = new Date().toISOString();
         addRelease.arg(['--dateend', dateEnd]);
+        
+        // Add create component options
+        if (createComponent) {
+            addRelease.arg(['--createcomponent', 'true']);
+            addRelease.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
+            addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
+        }
         
         console.log('Sending release metadata to ReARM...');
         

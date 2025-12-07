@@ -41,63 +41,7 @@ async function run(): Promise<void> {
         // Find rearm in PATH
         const rearmPath = tl.which('rearm', true);
         
-        // Step 1: Sync branches
-        console.log('Synchronizing branches with ReARM...');
-        let liveBranches: string = '';
-        let skipBranchSync = false;
-        
-        try {
-            const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
-                encoding: 'utf-8',
-                cwd: repoPath
-            });
-            const gitOutput = (result.stdout || '').trim();
-            console.log(`Git branch output: ${gitOutput || '(empty)'}`);
-            
-            // Check if output looks like valid branch refs or just a detached commit hash
-            const lines = gitOutput.split('\n').filter(line => line.trim());
-            const validBranches = lines.filter(line => {
-                // Valid branch refs should not end with a 40-char hex commit hash
-                const branchName = line.replace('refs/remotes/origin/', '');
-                return !/^[0-9a-f]{40}$/i.test(branchName);
-            });
-            
-            if (validBranches.length === 0 && lines.length > 0) {
-                // Only detached commit refs found, skip sync
-                console.log('Warning: Only detached commit refs found (shallow/detached checkout). Skipping branch sync.');
-                console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
-                skipBranchSync = true;
-            } else if (validBranches.length === 0) {
-                console.log('Warning: No branches found. Skipping branch sync.');
-                console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
-                skipBranchSync = true;
-            } else {
-                liveBranches = Buffer.from(validBranches.join('\n')).toString('base64').replace(/\n/g, '');
-            }
-        } catch (err) {
-            console.log(`Warning: Failed to get git branches: ${err}. Skipping branch sync.`);
-            console.log(`Make sure you use fetchDepth: 0 in your pipeline checkout step.`);
-            skipBranchSync = true;
-        }
-        
-        if (!skipBranchSync) {
-            const syncBranches = tl.tool(rearmPath);
-            syncBranches.arg('syncbranches');
-            syncBranches.arg(['-k', rearmApiKey]);
-            syncBranches.arg(['-i', rearmApiKeyId]);
-            syncBranches.arg(['-u', rearmUrl]);
-            syncBranches.arg(['--vcsuri', vcsUri]);
-            syncBranches.arg(['--repo-path', repoPath]);
-            syncBranches.arg(['--livebranches', liveBranches]);
-            
-            const syncResult = await syncBranches.execAsync();
-            if (syncResult !== 0) {
-                throw new Error(`ReARM syncbranches failed with exit code ${syncResult}`);
-            }
-            console.log('Branches synchronized successfully');
-        }
-        
-        // Step 2: Get latest release and check if build is needed
+        // Step 1: Get latest release and check if build is needed
         console.log('Checking for changes since last release...');
         let doBuild = false;
         let lastCommit = '';
@@ -319,6 +263,62 @@ async function run(): Promise<void> {
             // Set empty versions when no build needed
             fullVersion = '';
             shortVersion = '';
+        }
+
+        // Step 2: Sync branches
+        console.log('Synchronizing branches with ReARM...');
+        let liveBranches: string = '';
+        let skipBranchSync = false;
+        
+        try {
+            const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
+                encoding: 'utf-8',
+                cwd: repoPath
+            });
+            const gitOutput = (result.stdout || '').trim();
+            console.log(`Git branch output: ${gitOutput || '(empty)'}`);
+            
+            // Check if output looks like valid branch refs or just a detached commit hash
+            const lines = gitOutput.split('\n').filter(line => line.trim());
+            const validBranches = lines.filter(line => {
+                // Valid branch refs should not end with a 40-char hex commit hash
+                const branchName = line.replace('refs/remotes/origin/', '');
+                return !/^[0-9a-f]{40}$/i.test(branchName);
+            });
+            
+            if (validBranches.length === 0 && lines.length > 0) {
+                // Only detached commit refs found, skip sync
+                console.log('Warning: Only detached commit refs found (shallow/detached checkout). Skipping branch sync.');
+                console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
+                skipBranchSync = true;
+            } else if (validBranches.length === 0) {
+                console.log('Warning: No branches found. Skipping branch sync.');
+                console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
+                skipBranchSync = true;
+            } else {
+                liveBranches = Buffer.from(validBranches.join('\n')).toString('base64').replace(/\n/g, '');
+            }
+        } catch (err) {
+            console.log(`Warning: Failed to get git branches: ${err}. Skipping branch sync.`);
+            console.log(`Make sure you use fetchDepth: 0 in your pipeline checkout step.`);
+            skipBranchSync = true;
+        }
+        
+        if (!skipBranchSync) {
+            const syncBranches = tl.tool(rearmPath);
+            syncBranches.arg('syncbranches');
+            syncBranches.arg(['-k', rearmApiKey]);
+            syncBranches.arg(['-i', rearmApiKeyId]);
+            syncBranches.arg(['-u', rearmUrl]);
+            syncBranches.arg(['--vcsuri', vcsUri]);
+            syncBranches.arg(['--repo-path', repoPath]);
+            syncBranches.arg(['--livebranches', liveBranches]);
+            
+            const syncResult = await syncBranches.execAsync();
+            if (syncResult !== 0) {
+                throw new Error(`ReARM syncbranches failed with exit code ${syncResult}`);
+            }
+            console.log('Branches synchronized successfully');
         }
         
         // Set version variables

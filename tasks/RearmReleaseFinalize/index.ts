@@ -46,6 +46,7 @@ async function run(): Promise<void> {
         const createComponent = tl.getBoolInput('createComponent', false);
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
         const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
+        const allowRebuild = tl.getBoolInput('allowRebuild', false);
         
                 
         // Get repository URI and commit from Azure DevOps predefined variables
@@ -193,6 +194,9 @@ async function run(): Promise<void> {
             addRelease.arg(['--createcomponent', 'true']);
             addRelease.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
             addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
+        }
+        if (allowRebuild) {
+            addRelease.arg(['--rebuild', 'true']);
         }
         
         console.log('Sending release metadata to ReARM...');

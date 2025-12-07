@@ -12,6 +12,7 @@ async function run(): Promise<void> {
         const createComponent = tl.getBoolInput('createComponent', false);
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
         const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
+        const allowRebuild = tl.getBoolInput('allowRebuild', false);
         
         // Get repository URI and commit from Azure DevOps predefined variables
         const vcsUri = tl.getVariable('Build.Repository.Uri') || '';
@@ -240,6 +241,9 @@ async function run(): Promise<void> {
                     addRelease.arg(['--createcomponent', 'true']);
                     addRelease.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
                     addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
+                }
+                if (allowRebuild) {
+                    addRelease.arg(['--rebuild', 'true']);
                 }
                 
                 const addResult = await addRelease.execAsync();

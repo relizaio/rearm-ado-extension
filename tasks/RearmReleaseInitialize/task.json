@@ -80,6 +80,14 @@
             "defaultValue": "semver",
             "required": false,
             "helpMarkDown": "Feature branch version schema for the new component. Only used with createComponent. Same supported values as Version Schema."
+        },
+        {
+            "name": "allowRebuild",
+            "type": "boolean",
+            "label": "Allow Rebuild on CI Rerun",
+            "defaultValue": "false",
+            "required": false,
+            "helpMarkDown": "Allow rebuilding release on repeated CI reruns. If true, when a release with the same version already exists, it will be rebuilt instead of rejected."
         }
     ],
     "outputVariables": [

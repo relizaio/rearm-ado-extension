@@ -8,9 +8,9 @@
     "category": "Utility",
     "author": "Reliza Incorporated",
     "version": {
-        "Major": 0,
-        "Minor": 5,
-        "Patch": 1
+        "Major": 1,
+        "Minor": 0,
+        "Patch": 0
     },
     "instanceNameFormat": "Finalize Release with ReARM",
     "inputs": [

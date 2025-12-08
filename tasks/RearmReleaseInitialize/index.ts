@@ -77,7 +77,7 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
-        const branch = tl.getInput('branch', false) || tl.getVariable('Build.SourceBranchName') || '';
+        const branch = tl.getInput('branch', false) || tl.getVariable('Build.SourceBranch') || '';
         const versionInput = tl.getInput('version', false) || '';
         const createComponent = tl.getBoolInput('createComponent', false);
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';

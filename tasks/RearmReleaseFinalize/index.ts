@@ -17,12 +17,12 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
-        const branch = tl.getVariable('Build.SourceBranchName') || '';
+        const branch = tl.getVariable('Build.SourceBranch') || '';
         const version = tl.getVariable('REARM_FULL_VERSION') || '';
         const lifecycle = tl.getInput('lifecycle', false) || 'ASSEMBLED';
         
         if (!branch) {
-            throw new Error('Build.SourceBranchName is not available.');
+            throw new Error('Build.SourceBranch is not available.');
         }
         if (!version) {
             throw new Error('REARM_FULL_VERSION is not available. Make sure RearmReleaseInitialize task ran successfully.');

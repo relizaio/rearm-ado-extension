@@ -48,7 +48,7 @@
             "type": "string",
             "label": "Branch",
             "required": false,
-            "helpMarkDown": "Branch name (defaults to current branch from Build.SourceBranchName)"
+            "helpMarkDown": "Branch name (defaults to current branch from Build.SourceBranch)"
         },
         {
             "name": "version",

@@ -47,7 +47,7 @@ async function run(): Promise<void> {
         let lastCommit = '';
         
         try {
-            const getLatestResult = spawnSync(rearmPath, [
+            const getLatestArgs = [
                 'getlatestrelease',
                 '-k', rearmApiKey,
                 '-i', rearmApiKeyId,
@@ -55,7 +55,11 @@ async function run(): Promise<void> {
                 '--vcsuri', vcsUri,
                 '--repo-path', repoPath,
                 '--branch', branch
-            ], { encoding: 'utf-8', cwd: repoPath });
+            ];
+            if (versionInput) {
+                getLatestArgs.push('--uptoversion', versionInput);
+            }
+            const getLatestResult = spawnSync(rearmPath, getLatestArgs, { encoding: 'utf-8', cwd: repoPath });
             
             const latestReleaseOutput = getLatestResult.stdout || '';
             const releaseData = JSON.parse(latestReleaseOutput);

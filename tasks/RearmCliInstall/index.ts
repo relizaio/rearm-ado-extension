@@ -94,7 +94,7 @@ function getExpectedHash(sha256Content: string, fileName: string): string | null
 
 async function run(): Promise<void> {
     try {
-        const rearmCliVersion = tl.getInput('rearmCliVersion', true) || '25.12.5';
+        const rearmCliVersion = tl.getInput('rearmCliVersion', true) || '25.12.6';
         
         // Determine platform and architecture
         const platform = os.platform();

@@ -1,6 +1,76 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
 
+interface LatestReleaseResult {
+    doBuild: boolean;
+    lastCommit: string;
+}
+
+function getLatestRelease(
+    rearmPath: string,
+    rearmApiKey: string,
+    rearmApiKeyId: string,
+    rearmUrl: string,
+    vcsUri: string,
+    repoPath: string,
+    branch: string,
+    commit: string,
+    uptoVersion?: string
+): LatestReleaseResult {
+    const getLatestArgs = [
+        'getlatestrelease',
+        '-k', rearmApiKey,
+        '-i', rearmApiKeyId,
+        '-u', rearmUrl,
+        '--vcsuri', vcsUri,
+        '--repo-path', repoPath,
+        '--branch', branch
+    ];
+    if (uptoVersion) {
+        getLatestArgs.push('--uptoversion', uptoVersion);
+    }
+    
+    const getLatestResult = spawnSync(rearmPath, getLatestArgs, { encoding: 'utf-8', cwd: repoPath });
+    const latestReleaseOutput = getLatestResult.stdout || '';
+    const releaseData = JSON.parse(latestReleaseOutput);
+    const lastCommit = releaseData?.sourceCodeEntryDetails?.commit || '';
+    console.log(`Last Commit: ${lastCommit}`);
+    
+    let doBuild = false;
+    if (lastCommit && lastCommit !== 'null') {
+        // Check if lastCommit exists locally (may not in shallow checkout)
+        const commitExistsResult = spawnSync('git', ['cat-file', '-t', lastCommit], {
+            encoding: 'utf-8',
+            cwd: repoPath
+        });
+        const commitExists = commitExistsResult.status === 0;
+        
+        if (!commitExists) {
+            console.log(`Last commit ${lastCommit} not available locally (shallow checkout), assuming build is needed. Make sure to use fetchDepth: 0 in your pipeline checkout step to avoid shallow clone.`);
+            doBuild = true;
+        } else {
+            // Check for diff
+            try {
+                const diffResult = spawnSync('git', [
+                    'diff', `${lastCommit}..${commit}`, '--', './'
+                ], { encoding: 'utf-8', cwd: repoPath });
+                const diffOutput = diffResult.stdout || '';
+                if (diffOutput.trim() !== '') {
+                    doBuild = true;
+                }
+            } catch (diffErr) {
+                // If diff fails, do build
+                console.log('Diff check failed, assuming build is needed');
+                doBuild = true;
+            }
+        }
+    } else {
+        doBuild = true;
+    }
+    
+    return { doBuild, lastCommit };
+}
+
 async function run(): Promise<void> {
     try {
         const rearmApiKey = tl.getInput('rearmApiKey', true)!;
@@ -47,55 +117,12 @@ async function run(): Promise<void> {
         let lastCommit = '';
         
         try {
-            const getLatestArgs = [
-                'getlatestrelease',
-                '-k', rearmApiKey,
-                '-i', rearmApiKeyId,
-                '-u', rearmUrl,
-                '--vcsuri', vcsUri,
-                '--repo-path', repoPath,
-                '--branch', branch
-            ];
-            if (versionInput) {
-                getLatestArgs.push('--uptoversion', versionInput);
-            }
-            const getLatestResult = spawnSync(rearmPath, getLatestArgs, { encoding: 'utf-8', cwd: repoPath });
-            
-            const latestReleaseOutput = getLatestResult.stdout || '';
-            const releaseData = JSON.parse(latestReleaseOutput);
-            lastCommit = releaseData?.sourceCodeEntryDetails?.commit || '';
-            console.log(`Last Commit: ${lastCommit}`);
-            
-            if (lastCommit && lastCommit !== 'null') {
-                // Check if lastCommit exists locally (may not in shallow checkout)
-                const commitExistsResult = spawnSync('git', ['cat-file', '-t', lastCommit], {
-                    encoding: 'utf-8',
-                    cwd: repoPath
-                });
-                const commitExists = commitExistsResult.status === 0;
-                
-                if (!commitExists) {
-                    console.log(`Last commit ${lastCommit} not available locally (shallow checkout), assuming build is needed. Make sure to use fetchDepth: 0 in your pipeline checkout step to avoid shallow clone.`);
-                    doBuild = true;
-                } else {
-                    // Check for diff
-                    try {
-                        const diffResult = spawnSync('git', [
-                            'diff', `${lastCommit}..${commit}`, '--', './'
-                        ], { encoding: 'utf-8', cwd: repoPath });
-                        const diffOutput = diffResult.stdout || '';
-                        if (diffOutput.trim() !== '') {
-                            doBuild = true;
-                        }
-                    } catch (diffErr) {
-                        // If diff fails, do build
-                        console.log('Diff check failed, assuming build is needed');
-                        doBuild = true;
-                    }
-                }
-            } else {
-                doBuild = true;
-            }
+            const latestResult = getLatestRelease(
+                rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
+                vcsUri, repoPath, branch, commit, versionInput || undefined
+            );
+            doBuild = latestResult.doBuild;
+            lastCommit = latestResult.lastCommit;
         } catch (err) {
             // No previous release found, do build
             console.log('No previous release found, build is needed');
@@ -255,7 +282,29 @@ async function run(): Promise<void> {
                     const versionData = JSON.parse(jsonMatch[0]);
                     fullVersion = versionData.version || '';
                     shortVersion = versionData.dockerTagSafeVersion || fullVersion;
+                    const releaseAlreadyExists = versionData.releaseAlreadyExists === true;
                     console.log(`Got version from ReARM: ${fullVersion}`);
+                    
+                    // If release already exists and no input version was provided, re-check with the obtained version
+                    if (releaseAlreadyExists) {
+                        console.log('Release already exists, re-checking latest release with obtained version...');
+                        try {
+                            const latestResult = getLatestRelease(
+                                rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
+                                vcsUri, repoPath, branch, commit, fullVersion
+                            );
+                            doBuild = latestResult.doBuild;
+                            lastCommit = latestResult.lastCommit;
+                            // Update the output variables with new values
+                            tl.setVariable('DO_BUILD', String(doBuild));
+                            tl.setVariable('DoBuild', String(doBuild), false, true);
+                            tl.setVariable('LAST_COMMIT', lastCommit);
+                            tl.setVariable('LastCommit', lastCommit, false, true);
+                            console.log(`Updated DO_BUILD: ${doBuild}`);
+                        } catch (err) {
+                            console.log('Could not get latest release for existing version, keeping original doBuild value');
+                        }
+                    }
                 } catch (parseErr) {
                     throw new Error(`Failed to parse version response: ${getVersionOutput}`);
                 }

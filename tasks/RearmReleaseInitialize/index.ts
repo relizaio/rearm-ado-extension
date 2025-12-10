@@ -324,6 +324,12 @@ async function run(): Promise<void> {
         let skipBranchSync = false;
         
         try {
+            // Fetch all branches and PR refs to ensure we have complete branch list
+            spawnSync('git', ['fetch', 'origin', '+refs/heads/*:refs/remotes/origin/*', '+refs/pull/*/merge:refs/remotes/pull/*/merge'], {
+                encoding: 'utf-8',
+                cwd: repoPath
+            });
+            
             const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
                 encoding: 'utf-8',
                 cwd: repoPath

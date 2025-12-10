@@ -324,12 +324,7 @@ async function run(): Promise<void> {
         let skipBranchSync = false;
         
         try {
-            // Fetch all branches and PR refs to ensure we have complete branch list
-            spawnSync('git', ['fetch', 'origin', '+refs/heads/*:refs/remotes/origin/*', '+refs/pull/*/merge:refs/remotes/pull/*/merge'], {
-                encoding: 'utf-8',
-                cwd: repoPath
-            });
-            
+            // Get branches from git
             const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
                 encoding: 'utf-8',
                 cwd: repoPath
@@ -339,11 +334,77 @@ async function run(): Promise<void> {
             
             // Check if output looks like valid branch refs or just a detached commit hash
             const lines = gitOutput.split('\n').filter(line => line.trim());
-            const validBranches = lines.filter(line => {
+            let validBranches = lines.filter(line => {
                 // Valid branch refs should not end with a 40-char hex commit hash
                 const branchName = line.replace('refs/remotes/origin/', '');
                 return !/^[0-9a-f]{40}$/i.test(branchName);
             });
+            
+            // Fetch PR branches from Azure DevOps API
+            const collectionUri = tl.getVariable('System.TeamFoundationCollectionUri');
+            const project = tl.getVariable('System.TeamProject');
+            const repoId = tl.getVariable('Build.Repository.ID');
+            const accessToken = tl.getVariable('System.AccessToken');
+            
+            if (collectionUri && project && repoId && accessToken) {
+                try {
+                    const apiUrl = `${collectionUri}${project}/_apis/git/repositories/${repoId}/pullrequests?searchCriteria.status=active&api-version=7.1`;
+                    console.log(`Fetching active PRs from Azure DevOps API...`);
+                    
+                    const https = require('https');
+                    const http = require('http');
+                    const url = new URL(apiUrl);
+                    const httpModule = url.protocol === 'https:' ? https : http;
+                    
+                    const prBranches = await new Promise<string[]>((resolve) => {
+                        const req = httpModule.request(apiUrl, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json'
+                            }
+                        }, (res: any) => {
+                            let data = '';
+                            res.on('data', (chunk: string) => data += chunk);
+                            res.on('end', () => {
+                                try {
+                                    const json = JSON.parse(data);
+                                    if (json.value && Array.isArray(json.value)) {
+                                        const branches = json.value.map((pr: any) => pr.sourceRefName).filter(Boolean);
+                                        console.log(`Found ${branches.length} active PR source branches`);
+                                        resolve(branches);
+                                    } else {
+                                        console.log('No PRs found or unexpected API response');
+                                        resolve([]);
+                                    }
+                                } catch (e) {
+                                    console.log(`Warning: Failed to parse PR API response: ${e}`);
+                                    resolve([]);
+                                }
+                            });
+                        });
+                        req.on('error', (e: Error) => {
+                            console.log(`Warning: PR API request failed: ${e.message}`);
+                            resolve([]);
+                        });
+                        req.end();
+                    });
+                    
+                    // Add PR source branches to the list (they come as refs/heads/...)
+                    for (const prBranch of prBranches) {
+                        // Convert refs/heads/branch to refs/remotes/origin/branch format
+                        const remoteBranch = prBranch.replace('refs/heads/', 'refs/remotes/origin/');
+                        if (!validBranches.includes(remoteBranch)) {
+                            validBranches.push(remoteBranch);
+                            console.log(`Added PR branch: ${remoteBranch}`);
+                        }
+                    }
+                } catch (apiErr) {
+                    console.log(`Warning: Could not fetch PRs from API: ${apiErr}`);
+                }
+            } else {
+                console.log('Azure DevOps API variables not available, skipping PR branch fetch');
+            }
             
             if (validBranches.length === 0 && lines.length > 0) {
                 // Only detached commit refs found, skip sync

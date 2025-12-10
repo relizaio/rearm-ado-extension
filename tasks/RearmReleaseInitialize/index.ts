@@ -370,8 +370,18 @@ async function run(): Promise<void> {
                                 try {
                                     const json = JSON.parse(data);
                                     if (json.value && Array.isArray(json.value)) {
-                                        const branches = json.value.map((pr: any) => pr.sourceRefName).filter(Boolean);
-                                        console.log(`Found ${branches.length} active PR source branches`);
+                                        const branches: string[] = [];
+                                        for (const pr of json.value) {
+                                            // Add source branch
+                                            if (pr.sourceRefName) {
+                                                branches.push(pr.sourceRefName);
+                                            }
+                                            // Add PR merge ref (refs/pull/{id}/merge)
+                                            if (pr.pullRequestId) {
+                                                branches.push(`refs/pull/${pr.pullRequestId}/merge`);
+                                            }
+                                        }
+                                        console.log(`Found ${json.value.length} active PRs, ${branches.length} total refs`);
                                         resolve(branches);
                                     } else {
                                         console.log('No PRs found or unexpected API response');
@@ -390,10 +400,16 @@ async function run(): Promise<void> {
                         req.end();
                     });
                     
-                    // Add PR source branches to the list (they come as refs/heads/...)
+                    // Add PR branches to the list
                     for (const prBranch of prBranches) {
-                        // Convert refs/heads/branch to refs/remotes/origin/branch format
-                        const remoteBranch = prBranch.replace('refs/heads/', 'refs/remotes/origin/');
+                        let remoteBranch: string;
+                        if (prBranch.startsWith('refs/pull/')) {
+                            // PR merge refs: refs/pull/*/merge -> refs/remotes/pull/*/merge
+                            remoteBranch = prBranch.replace('refs/pull/', 'refs/remotes/pull/');
+                        } else {
+                            // Source branches: refs/heads/branch -> refs/remotes/origin/branch
+                            remoteBranch = prBranch.replace('refs/heads/', 'refs/remotes/origin/');
+                        }
                         if (!validBranches.includes(remoteBranch)) {
                             validBranches.push(remoteBranch);
                             console.log(`Added PR branch: ${remoteBranch}`);

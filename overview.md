@@ -26,6 +26,24 @@ Downloads and installs the ReARM CLI.
 - Supports both Windows and Linux agents
 - Automatically detects the agent OS and downloads the appropriate binary
 - Adds ReARM CLI to PATH
+- Sets `RearmCli` output variable with the full path to the executable
+
+**Using RearmCli in Bash Scripts:**
+
+To use the `RearmCli` variable in subsequent bash tasks, you must give the task a `name` and reference the variable using that name:
+
+```yaml
+steps:
+  - task: RearmCliInstall@1
+    name: RearmCliInstall  # Required to reference output variables
+    inputs:
+      rearmCliVersion: '25.12.7'
+
+  - bash: |
+      echo "RearmCli path: $(RearmCliInstall.RearmCli)"
+      "$(RearmCliInstall.RearmCli)" --version
+    displayName: 'Use ReARM CLI'
+```
 
 ### RearmReleaseInitialize
 
@@ -50,7 +68,7 @@ Finalizes a release in ReARM with deliverable metadata, artifacts, and runs the 
 
 ```yaml
 steps:
-  - task: RearmCliInstall@0
+  - task: RearmCliInstall@1
     inputs:
       rearmCliVersion: '25.12.7'
 
@@ -63,11 +81,11 @@ steps:
 
 ```yaml
 steps:
-  - task: RearmCliInstall@0
+  - task: RearmCliInstall@1
     inputs:
       rearmCliVersion: '25.12.7'
 
-  - task: RearmReleaseInitialize@0
+  - task: RearmReleaseInitialize@1
     inputs:
       rearmApiKey: '$(REARM_API_KEY)'
       rearmApiKeyId: '$(REARM_API_KEY_ID)'
@@ -87,11 +105,11 @@ steps:
 
 ```yaml
 steps:
-  - task: RearmCliInstall@0
+  - task: RearmCliInstall@1
     inputs:
       rearmCliVersion: '25.12.7'
 
-  - task: RearmReleaseInitialize@0
+  - task: RearmReleaseInitialize@1
     inputs:
       rearmApiKey: '$(REARM_API_KEY)'
       rearmApiKeyId: '$(REARM_API_KEY_ID)'
@@ -99,7 +117,7 @@ steps:
 
   # ... your build steps (use $(REARM_FULL_VERSION) or $(REARM_SHORT_VERSION) for tagging) ...
 
-  - task: RearmReleaseFinalize@0
+  - task: RearmReleaseFinalize@1
     inputs:
       rearmApiKey: '$(REARM_API_KEY)'
       rearmApiKeyId: '$(REARM_API_KEY_ID)'

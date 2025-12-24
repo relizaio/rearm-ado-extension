@@ -82,6 +82,7 @@ async function run(): Promise<void> {
         const createComponent = tl.getBoolInput('createComponent', false);
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
         const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
+        const vcsDisplayName = tl.getInput('vcsDisplayName', false);
         const allowRebuild = tl.getBoolInput('allowRebuild', false);
         
         // Get repository URI and commit from Azure DevOps predefined variables
@@ -258,6 +259,9 @@ async function run(): Promise<void> {
                     getVersion.arg(['--createcomponent', 'true']);
                     getVersion.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
                     getVersion.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
+                    if (vcsDisplayName) {
+                        getVersion.arg(['--vcs-display-name', vcsDisplayName]);
+                    }
                 }
                 
                 // Execute using spawnSync to reliably capture output

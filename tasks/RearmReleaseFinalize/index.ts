@@ -46,6 +46,7 @@ async function run(): Promise<void> {
         const createComponent = tl.getBoolInput('createComponent', false);
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
         const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
+        const vcsDisplayName = tl.getInput('vcsDisplayName', false);
         const allowRebuild = tl.getBoolInput('allowRebuild', false);
         
                 
@@ -194,6 +195,9 @@ async function run(): Promise<void> {
             addRelease.arg(['--createcomponent', 'true']);
             addRelease.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
             addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
+            if (vcsDisplayName) {
+                addRelease.arg(['--vcs-display-name', vcsDisplayName]);
+            }
         }
         if (allowRebuild) {
             addRelease.arg(['--rebuild', 'true']);

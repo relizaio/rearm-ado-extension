@@ -82,6 +82,13 @@
             "helpMarkDown": "Feature branch version schema for the new component. Only used with createComponent. Same supported values as Version Schema."
         },
         {
+            "name": "vcsDisplayName",
+            "type": "string",
+            "label": "VCS Display Name",
+            "required": false,
+            "helpMarkDown": "Display name for the VCS. Only used with createComponent. If not supplied, ReARM default logic will be used."
+        },
+        {
             "name": "allowRebuild",
             "type": "boolean",
             "label": "Allow Rebuild on CI Rerun",

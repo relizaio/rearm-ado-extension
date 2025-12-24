@@ -153,6 +153,7 @@ steps:
 | `createComponent` | No | `false` | Create component if it doesn't exist. Requires organization-wide read-write API key. |
 | `createComponentVersionSchema` | No | `semver` | Version schema for new component (semver, calver_reliza, calver_ubuntu, etc.) |
 | `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for new component |
+| `vcsDisplayName` | No | - | Display name for the VCS. Only used with createComponent. If not supplied, ReARM default logic will be used. |
 | `allowRebuild` | No | `false` | Allow rebuilding release on CI reruns. If true, existing releases will be rebuilt instead of rejected. |
 
 ### RearmReleaseInitialize Outputs
@@ -187,6 +188,7 @@ steps:
 | `createComponent` | No | `false` | Create component if it doesn't exist. Requires organization-wide read-write API key. |
 | `createComponentVersionSchema` | No | `semver` | Version schema for new component (semver, calver_reliza, calver_ubuntu, etc.) |
 | `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for new component |
+| `vcsDisplayName` | No | - | Display name for the VCS. Only used with createComponent. If not supplied, ReARM default logic will be used. |
 | `allowRebuild` | No | `false` | Allow rebuilding release on CI reruns. If true, existing releases will be rebuilt instead of rejected. |
 
 ## Support

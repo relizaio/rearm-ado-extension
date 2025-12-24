@@ -37,7 +37,7 @@ steps:
   - task: RearmCliInstall@1
     name: RearmCliInstall  # Required to reference output variables
     inputs:
-      rearmCliVersion: '25.12.7'
+      rearmCliVersion: '25.12.8'
 
   - bash: |
       echo "RearmCli path: $(RearmCliInstall.RearmCli)"
@@ -70,7 +70,7 @@ Finalizes a release in ReARM with deliverable metadata, artifacts, and runs the 
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '25.12.7'
+      rearmCliVersion: '25.12.8'
 
   - script: |
       rearm --version
@@ -83,7 +83,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '25.12.7'
+      rearmCliVersion: '25.12.8'
 
   - task: RearmReleaseInitialize@1
     inputs:
@@ -107,7 +107,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '25.12.7'
+      rearmCliVersion: '25.12.8'
 
   - task: RearmReleaseInitialize@1
     inputs:
@@ -138,7 +138,7 @@ steps:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | No | `25.12.7` | Version of the ReARM CLI to install |
+| `rearmCliVersion` | No | `25.12.8` | Version of the ReARM CLI to install |
 
 ### RearmReleaseInitialize Inputs
 

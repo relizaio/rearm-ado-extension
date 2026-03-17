@@ -10,7 +10,7 @@
     "version": {
         "Major": 1,
         "Minor": 1,
-        "Patch": 9
+        "Patch": 10
     },
     "instanceNameFormat": "Install Rearm CLI $(rearmCliVersion)",
     "inputs": [
@@ -18,9 +18,9 @@
             "name": "rearmCliVersion",
             "type": "string",
             "label": "Rearm CLI Version",
-            "defaultValue": "26.03.11",
+            "defaultValue": "26.03.12",
             "required": false,
-            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.03.11')"
+            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.03.12')"
         }
     ],
     "outputVariables": [

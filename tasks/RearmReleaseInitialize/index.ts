@@ -344,22 +344,49 @@ async function run(): Promise<void> {
                 return !/^[0-9a-f]{40}$/i.test(branchName);
             });
             
-            // Fetch PR branches from Azure DevOps API
+            // Fetch PR branches - use git ls-remote for GitHub, ADO REST API for TfsGit
+            const repoProvider = tl.getVariable('Build.Repository.Provider');
             const collectionUri = tl.getVariable('System.TeamFoundationCollectionUri');
             const project = tl.getVariable('System.TeamProject');
             const repoId = tl.getVariable('Build.Repository.ID');
             const accessToken = tl.getVariable('System.AccessToken');
-            
-            if (collectionUri && project && repoId && accessToken) {
+
+            if (repoProvider === 'GitHub' || repoProvider === 'GitHubEnterprise') {
+                try {
+                    const lsRemoteResult = spawnSync('git', ['ls-remote', 'origin', 'refs/pull/*'], {
+                        encoding: 'utf-8',
+                        cwd: repoPath
+                    });
+                    const lsOutput = (lsRemoteResult.stdout || '').trim();
+                    if (lsOutput) {
+                        for (const line of lsOutput.split('\n').filter((l: string) => l.trim())) {
+                            const parts = line.split('\t');
+                            if (parts.length >= 2) {
+                                const ref = parts[1].trim();
+                                const remoteBranch = ref.replace('refs/pull/', 'refs/remotes/pull/');
+                                if (!validBranches.includes(remoteBranch)) {
+                                    validBranches.push(remoteBranch);
+                                    console.log(`Added PR branch: ${remoteBranch}`);
+                                }
+                            }
+                        }
+                        console.log(`Fetched PR refs via git ls-remote`);
+                    } else {
+                        console.log('No PR refs found via git ls-remote');
+                    }
+                } catch (lsErr) {
+                    console.log(`Warning: Could not fetch PR refs via git ls-remote: ${lsErr}`);
+                }
+            } else if (collectionUri && project && repoId && accessToken) {
                 try {
                     const apiUrl = `${collectionUri}${project}/_apis/git/repositories/${repoId}/pullrequests?searchCriteria.status=active&api-version=7.1`;
                     console.log(`Fetching active PRs from Azure DevOps API...`);
-                    
+
                     const https = require('https');
                     const http = require('http');
                     const url = new URL(apiUrl);
                     const httpModule = url.protocol === 'https:' ? https : http;
-                    
+
                     const prBranches = await new Promise<string[]>((resolve) => {
                         const req = httpModule.request(apiUrl, {
                             method: 'GET',
@@ -376,11 +403,9 @@ async function run(): Promise<void> {
                                     if (json.value && Array.isArray(json.value)) {
                                         const branches: string[] = [];
                                         for (const pr of json.value) {
-                                            // Add source branch
                                             if (pr.sourceRefName) {
                                                 branches.push(pr.sourceRefName);
                                             }
-                                            // Add PR merge ref (refs/pull/{id}/merge)
                                             if (pr.pullRequestId) {
                                                 branches.push(`refs/pull/${pr.pullRequestId}/merge`);
                                             }
@@ -403,15 +428,12 @@ async function run(): Promise<void> {
                         });
                         req.end();
                     });
-                    
-                    // Add PR branches to the list
+
                     for (const prBranch of prBranches) {
                         let remoteBranch: string;
                         if (prBranch.startsWith('refs/pull/')) {
-                            // PR merge refs: refs/pull/*/merge -> refs/remotes/pull/*/merge
                             remoteBranch = prBranch.replace('refs/pull/', 'refs/remotes/pull/');
                         } else {
-                            // Source branches: refs/heads/branch -> refs/remotes/origin/branch
                             remoteBranch = prBranch.replace('refs/heads/', 'refs/remotes/origin/');
                         }
                         if (!validBranches.includes(remoteBranch)) {
@@ -423,7 +445,7 @@ async function run(): Promise<void> {
                     console.log(`Warning: Could not fetch PRs from API: ${apiErr}`);
                 }
             } else {
-                console.log('Azure DevOps API variables not available, skipping PR branch fetch');
+                console.log('Skipping PR branch fetch: no supported provider detected or ADO API variables not available');
             }
             
             if (validBranches.length === 0 && lines.length > 0) {

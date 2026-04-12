@@ -1,6 +1,28 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
 
+interface ArtifactTag {
+    key: string;
+    value: string;
+}
+
+interface DownloadLink {
+    uri: string;
+    content?: string;
+}
+
+interface ReleaseArtifact {
+    displayIdentifier?: string;
+    type: string;
+    bomFormat?: string;
+    storedIn?: string;
+    filePath?: string;
+    downloadLinks?: DownloadLink[];
+    inventoryTypes?: string[];
+    tags?: ArtifactTag[];
+    artifacts?: ReleaseArtifact[];
+}
+
 interface Deliverable {
     odelId?: string;
     odelType?: string;
@@ -9,7 +31,7 @@ interface Deliverable {
     odelBuildId?: string;
     odelBuildUri?: string;
     odelCiMeta?: string;
-    odelArtsJson?: string | unknown[];
+    odelArtsJson?: ReleaseArtifact[];
 }
 
 interface ReleaseEntry {
@@ -24,18 +46,29 @@ interface ReleaseEntry {
     createComponentVersionSchema?: string;
     createComponentBranchVersionSchema?: string;
     commits?: string;
-    releaseArts?: string | unknown[];
-    sceArts?: string | unknown[];
+    releaseArts?: ReleaseArtifact[];
+    sceArts?: ReleaseArtifact[];
     runOnCondition?: boolean;
     datestart?: string;
     dateend?: string;
     deliverables?: Deliverable[];
 }
 
-function normalizeArtsPaths(arts: string | unknown[] | undefined): string | undefined {
-    if (arts === undefined || arts === null) return undefined;
-    const str = typeof arts === 'string' ? arts : JSON.stringify(arts);
-    return str.replace(/\\\\/g, '/').replace(/\\/g, '/');
+function normalizeArtifactPaths(artifacts: ReleaseArtifact[]): ReleaseArtifact[] {
+    return artifacts.map(art => {
+        const normalized: ReleaseArtifact = {
+            ...art,
+            filePath: art.filePath ? art.filePath.replace(/\\/g, '/') : art.filePath
+        };
+        if (art.artifacts) {
+            normalized.artifacts = normalizeArtifactPaths(art.artifacts);
+        }
+        return normalized;
+    });
+}
+
+function serializeArtifacts(artifacts: ReleaseArtifact[]): string {
+    return JSON.stringify(normalizeArtifactPaths(artifacts));
 }
 
 function normalizeDigests(digests: string | string[] | undefined): string | undefined {
@@ -266,9 +299,9 @@ async function run(): Promise<void> {
             // Resolve datestart
             const dateStart = rel.datestart || taskStartTime;
 
-            // Normalize artifact paths
-            const sceArtsNorm = normalizeArtsPaths(rel.sceArts);
-            const releaseArtsNorm = normalizeArtsPaths(rel.releaseArts);
+            // Serialize and normalize artifact paths
+            const sceArtsNorm = rel.sceArts && rel.sceArts.length > 0 ? serializeArtifacts(rel.sceArts) : undefined;
+            const releaseArtsNorm = rel.releaseArts && rel.releaseArts.length > 0 ? serializeArtifacts(rel.releaseArts) : undefined;
 
             // Determine deliverables list (empty array means one call with no deliverable flags)
             const deliverables = rel.deliverables && rel.deliverables.length > 0
@@ -334,15 +367,8 @@ async function run(): Promise<void> {
                     const ciMeta = deliverable.odelCiMeta || 'azuredevops';
                     addRelease.arg(['--odelcimeta', ciMeta]);
 
-                    if (deliverable.odelArtsJson) {
-                        const normed = normalizeArtsPaths(
-                            typeof deliverable.odelArtsJson === 'string'
-                                ? deliverable.odelArtsJson
-                                : JSON.stringify(deliverable.odelArtsJson)
-                        );
-                        if (normed) {
-                            addRelease.arg(['--odelartsjson', normed]);
-                        }
+                    if (deliverable.odelArtsJson && deliverable.odelArtsJson.length > 0) {
+                        addRelease.arg(['--odelartsjson', serializeArtifacts(deliverable.odelArtsJson)]);
                     }
                 }
 

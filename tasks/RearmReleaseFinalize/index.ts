@@ -1,6 +1,48 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
 
+interface ArtifactTag {
+    key: string;
+    value: string;
+}
+
+interface DownloadLink {
+    uri: string;
+    content?: string;
+}
+
+interface ReleaseArtifact {
+    displayIdentifier?: string;
+    type: string;
+    bomFormat?: string;
+    storedIn?: string;
+    filePath?: string;
+    downloadLinks?: DownloadLink[];
+    inventoryTypes?: string[];
+    tags?: ArtifactTag[];
+    artifacts?: ReleaseArtifact[];
+}
+
+function normalizeArtifactPaths(artifacts: ReleaseArtifact[]): ReleaseArtifact[] {
+    return artifacts.map(art => {
+        const normalized: ReleaseArtifact = {
+            ...art,
+            filePath: art.filePath ? art.filePath.replace(/\\/g, '/') : art.filePath
+        };
+        if (art.artifacts) {
+            normalized.artifacts = normalizeArtifactPaths(art.artifacts);
+        }
+        return normalized;
+    });
+}
+
+function serializeArtifacts(input: string): string | undefined {
+    if (!input) return undefined;
+    const parsed = JSON.parse(input) as ReleaseArtifact[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return undefined;
+    return JSON.stringify(normalizeArtifactPaths(parsed));
+}
+
 async function run(): Promise<void> {
     try {
         // Check if we should run based on DO_BUILD
@@ -163,24 +205,27 @@ async function run(): Promise<void> {
                 addRelease.arg(['--odelcimeta', odelCiMeta]);
             }
             if (odelArtsJson) {
-                // Normalize Windows backslashes to forward slashes in JSON paths
-                const normalizedArtsJson = odelArtsJson.replace(/\\\\/g, '/').replace(/\\/g, '/');
-                addRelease.arg(['--odelartsjson', normalizedArtsJson]);
+                const serialized = serializeArtifacts(odelArtsJson);
+                if (serialized) {
+                    addRelease.arg(['--odelartsjson', serialized]);
+                }
             }
         }
-        
+
         // Add source code entry artifacts
         if (sceArts) {
-            // Normalize Windows backslashes to forward slashes in JSON paths
-            const normalizedSceArts = sceArts.replace(/\\\\/g, '/').replace(/\\/g, '/');
-            addRelease.arg(['--scearts', normalizedSceArts]);
+            const serialized = serializeArtifacts(sceArts);
+            if (serialized) {
+                addRelease.arg(['--scearts', serialized]);
+            }
         }
-        
+
         // Add release artifacts
         if (releaseArts) {
-            // Normalize Windows backslashes to forward slashes in JSON paths
-            const normalizedReleaseArts = releaseArts.replace(/\\\\/g, '/').replace(/\\/g, '/');
-            addRelease.arg(['--releasearts', normalizedReleaseArts]);
+            const serialized = serializeArtifacts(releaseArts);
+            if (serialized) {
+                addRelease.arg(['--releasearts', serialized]);
+            }
         }
         
         // Add build timing

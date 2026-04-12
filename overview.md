@@ -213,15 +213,15 @@ steps:
             "version": "$(MY_VERSION)",
             "lifecycle": "ASSEMBLED",
             "repoPath": ".",
-            "sceArts": "[{\"bomFormat\":\"CYCLONEDX\",\"type\":\"BOM\",\"filePath\":\"./source-sbom.json\"}]",
-            "releaseArts": "[{\"displayIdentifier\":\"release-notes\",\"type\":\"RELEASE_NOTES\",\"storedIn\":\"REARM\",\"filePath\":\"./CHANGELOG.md\"}]",
+            "sceArts": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./source-sbom.json"}],
+            "releaseArts": [{"displayIdentifier": "release-notes", "type": "RELEASE_NOTES", "storedIn": "REARM", "filePath": "./CHANGELOG.md"}],
             "deliverables": [
               {
                 "odelId": "myregistry.azurecr.io/myapp",
                 "odelType": "CONTAINER",
                 "odelDigests": ["$(DOCKER_SHA_256)"],
                 "odelPurl": "pkg:oci/myapp@$(DOCKER_SHA_256)",
-                "odelArtsJson": "[{\"bomFormat\":\"CYCLONEDX\",\"type\":\"BOM\",\"filePath\":\"./sbom.json\"}]"
+                "odelArtsJson": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./sbom.json"}]
               }
             ]
           }
@@ -258,8 +258,8 @@ steps:
             "runOnCondition": true,
             "datestart": "2026-04-11T10:00:00.000Z",
             "dateend": "2026-04-11T10:05:00.000Z",
-            "sceArts": "[{\"bomFormat\":\"CYCLONEDX\",\"type\":\"BOM\",\"filePath\":\"./source-sbom.json\"}]",
-            "releaseArts": "[{\"displayIdentifier\":\"release-notes\",\"type\":\"RELEASE_NOTES\",\"storedIn\":\"REARM\",\"filePath\":\"./CHANGELOG.md\"}]",
+            "sceArts": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./source-sbom.json"}],
+            "releaseArts": [{"displayIdentifier": "release-notes", "type": "RELEASE_NOTES", "storedIn": "REARM", "filePath": "./CHANGELOG.md"}],
             "deliverables": [
               {
                 "odelId": "myregistry.azurecr.io/myapp",
@@ -269,7 +269,7 @@ steps:
                 "odelBuildId": "azuredevops$(Build.BuildNumber)",
                 "odelBuildUri": "$(Build.BuildUri)",
                 "odelCiMeta": "azuredevops",
-                "odelArtsJson": "[{\"bomFormat\":\"CYCLONEDX\",\"type\":\"BOM\",\"filePath\":\"./sbom.json\"}]"
+                "odelArtsJson": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./sbom.json"}]
               }
             ]
           }
@@ -396,8 +396,8 @@ Each element of the `releases` JSON array supports the following fields:
 | `createComponentVersionSchema` | No | `semver` | Version schema for the new component (`semver`, `calver_reliza`, `calver_ubuntu`, etc.) |
 | `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for the new component |
 | `commits` | No | Auto-fetched | Base64-encoded commits history. Auto-fetched from git (last 100 commits since previous release) if not provided. |
-| `releaseArts` | No | - | JSON array of release artifacts (release notes, security reports, etc.) |
-| `sceArts` | No | - | JSON array of source code entry artifacts |
+| `releaseArts` | No | - | JSON array of release artifacts (release notes, security reports, etc.). Must be a JSON array, not a string. |
+| `sceArts` | No | - | JSON array of source code entry artifacts. Must be a JSON array, not a string. |
 | `runOnCondition` | No | `true` | When `true`, performs change detection (same logic as `RearmReleaseInitialize`): calls `getlatestrelease` and runs a git diff. The release is skipped if no changes are detected since the last release. Set to `false` to always submit regardless of changes. |
 | `datestart` | No | Task start time | ISO 8601 build start timestamp. Defaults to the time the task began executing. |
 | `dateend` | No | Time of submission | ISO 8601 build end timestamp. Defaults to the time just before each `addrelease` call. |
@@ -416,7 +416,7 @@ Each element of a release's `deliverables` array supports the following fields:
 | `odelBuildId` | No | `azuredevops<BuildNumber>` | Build identifier for the deliverable |
 | `odelBuildUri` | No | `Build.BuildUri` | URI of the build |
 | `odelCiMeta` | No | `azuredevops` | CI system metadata |
-| `odelArtsJson` | No | - | JSON array of deliverable artifacts (SBOMs, attestations, etc.) |
+| `odelArtsJson` | No | - | JSON array of deliverable artifacts (SBOMs, attestations, etc.). Must be a JSON array, not a string. |
 
 **Validation rules:**
 - No two releases may share the same combination of `vcsUri`, `repoPath`, and `version`.

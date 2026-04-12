@@ -113,10 +113,15 @@ async function run(): Promise<void> {
         // Capture task start time once — used as default datestart for all releases
         const taskStartTime = new Date().toISOString();
 
-        // Parse releases JSON
+        // Parse releases JSON.
+        // Pre-process: escape lone backslashes that may appear when ADO expands pipeline
+        // variables containing Windows paths (e.g. $(Pipeline.Workspace) -> D:\a\1\s)
+        // into the JSON string before the agent passes it to the task.
+        // Only backslashes NOT already forming a valid JSON escape sequence are escaped.
+        const sanitizedReleasesInput = releasesInput.replace(/\\(?![\\"])/g, '\\\\');
         let releases: ReleaseEntry[];
         try {
-            releases = JSON.parse(releasesInput);
+            releases = JSON.parse(sanitizedReleasesInput);
             if (!Array.isArray(releases)) {
                 throw new Error('releases input must be a JSON array');
             }

@@ -1,0 +1,62 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
+    "id": "3f7a1d92-4c85-4e2b-b934-71d0e8f52c44",
+    "name": "RearmAddMultiRelease",
+    "friendlyName": "ReARM Add Multiple Releases",
+    "description": "Self-sufficient task to add multiple releases to ReARM in one step. No initialize or finalize tasks required. Version must be provided per release.",
+    "helpMarkDown": "[Learn more about this task](https://github.com/relizaio/rearm-ado-extension)\n\nThe `releases` input accepts a JSON array of release objects. Each object supports the following fields:\n\n```json\n[\n  {\n    \"version\": \"1.0.0\",\n    \"lifecycle\": \"ASSEMBLED\",\n    \"repoPath\": \".\",\n    \"vcsUri\": \"\",\n    \"vcsDisplayName\": \"\",\n    \"branch\": \"\",\n    \"createComponent\": false,\n    \"createComponentName\": \"\",\n    \"createComponentVersionSchema\": \"semver\",\n    \"createComponentBranchVersionSchema\": \"semver\",\n    \"commits\": \"\",\n    \"releaseArts\": [],\n    \"sceArts\": [],\n    \"runOnCondition\": true,\n    \"datestart\": \"\",\n    \"dateend\": \"\",\n    \"deliverables\": [\n      {\n        \"odelId\": \"registry.example.com/myimage\",\n        \"odelType\": \"CONTAINER\",\n        \"odelDigests\": [\"sha256:abc123\"],\n        \"odelPurl\": \"pkg:oci/myimage@sha256:abc123\",\n        \"odelBuildId\": \"\",\n        \"odelBuildUri\": \"\",\n        \"odelCiMeta\": \"azuredevops\",\n        \"odelArtsJson\": []\n      }\n    ]\n  }\n]\n```",
+    "category": "Utility",
+    "author": "Reliza Incorporated",
+    "version": {
+        "Major": 1,
+        "Minor": 2,
+        "Patch": 0
+    },
+    "instanceNameFormat": "Add Multiple Releases with ReARM",
+    "inputs": [
+        {
+            "name": "rearmApiKey",
+            "type": "string",
+            "label": "ReARM API Key",
+            "required": true,
+            "helpMarkDown": "API Key for ReARM authentication"
+        },
+        {
+            "name": "rearmApiKeyId",
+            "type": "string",
+            "label": "ReARM API Key ID",
+            "required": true,
+            "helpMarkDown": "API Key ID for ReARM authentication"
+        },
+        {
+            "name": "rearmUrl",
+            "type": "string",
+            "label": "ReARM URL",
+            "required": true,
+            "helpMarkDown": "ReARM server URL"
+        },
+        {
+            "name": "allowRebuild",
+            "type": "boolean",
+            "label": "Allow Rebuild on CI Rerun",
+            "defaultValue": "false",
+            "required": false,
+            "helpMarkDown": "Allow rebuilding release on repeated CI reruns. If true, when a release with the same version already exists, it will be rebuilt instead of rejected. Applies to all releases."
+        },
+        {
+            "name": "releases",
+            "type": "multiLine",
+            "label": "Releases JSON",
+            "required": true,
+            "helpMarkDown": "JSON array of release objects. Each release must have a 'version' field. See task documentation for the full schema."
+        }
+    ],
+    "execution": {
+        "Node16": {
+            "target": "index.js"
+        },
+        "Node20_1": {
+            "target": "index.js"
+        }
+    }
+}

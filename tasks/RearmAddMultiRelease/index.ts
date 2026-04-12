@@ -119,8 +119,6 @@ async function run(): Promise<void> {
         // into the JSON string before the agent passes it to the task.
         // Only backslashes NOT already forming a valid JSON escape sequence are escaped.
         const sanitizedReleasesInput = releasesInput.replace(/\\(?![\\"])/g, '\\\\');
-        console.log(`DEBUG raw releases input (first 1000 chars):\n${releasesInput.substring(0, 1000)}`);
-        console.log(`DEBUG sanitized releases input (first 1000 chars):\n${sanitizedReleasesInput.substring(0, 1000)}`);
         let releases: ReleaseEntry[];
         try {
             releases = JSON.parse(sanitizedReleasesInput);
@@ -128,14 +126,6 @@ async function run(): Promise<void> {
                 throw new Error('releases input must be a JSON array');
             }
         } catch (err: any) {
-            // Log context around the error position if available
-            const posMatch = err.message.match(/position (\d+)/);
-            if (posMatch) {
-                const pos = parseInt(posMatch[1], 10);
-                const start = Math.max(0, pos - 40);
-                const end = Math.min(sanitizedReleasesInput.length, pos + 40);
-                console.log(`DEBUG context around position ${pos}: ...${JSON.stringify(sanitizedReleasesInput.substring(start, end))}...`);
-            }
             throw new Error(`Failed to parse releases JSON: ${err.message}`);
         }
 

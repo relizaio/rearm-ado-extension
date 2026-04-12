@@ -93,3 +93,45 @@ You can test the task locally using the `tfx` CLI:
 ```bash
 tfx build tasks upload --task-path tasks/RearmCliInstall
 ```
+
+This requires a Personal Access Token (PAT) with the correct scopes. When you run `tfx` for the first time (or without a cached token) it will prompt you interactively, but you can also pass it explicitly via `--token`.
+
+#### Obtaining a PAT
+
+1. Go to your Azure DevOps organization: `https://dev.azure.com/<your-org>`
+2. Click your profile avatar (top-right, "User Settings") → **Personal access tokens**
+3. Click **New Token**
+4. Set the following:
+   - **Name**: anything descriptive (e.g. `tfx-local-dev`)
+   - **Organization**: your target org
+   - **Expiration**: as needed
+   - **Scopes**: select **Custom defined**, then enable:
+     - **Agent Pools** → Read & manage
+     - **Build** → Read & execute
+     - **Extensions** → Read & manage *(required for publishing/uploading)*
+5. Click **Create** and copy the token — it is only shown once
+
+#### Configuring tfx with the token
+
+**Option 1 — pass inline (one-off):**
+```bash
+tfx build tasks upload --task-path tasks/RearmCliInstall \
+  --service-url https://dev.azure.com/<your-org> \
+  --token <your-pat>
+```
+
+**Option 2 — login once and cache credentials:**
+```bash
+tfx login --service-url https://dev.azure.com/<your-org> --token <your-pat>
+# subsequent tfx commands in the same directory will reuse the cached token
+tfx build tasks upload --task-path tasks/RearmCliInstall
+```
+
+**Option 3 — environment variable (useful in CI or shell profiles):**
+```bash
+export TFX_TOKEN=<your-pat>
+export TFX_SERVICE_URL=https://dev.azure.com/<your-org>
+tfx build tasks upload --task-path tasks/RearmCliInstall
+```
+
+The same token and setup applies to `tfx extension publish` used in the [Publishing to Marketplace](#publishing-to-marketplace) section.

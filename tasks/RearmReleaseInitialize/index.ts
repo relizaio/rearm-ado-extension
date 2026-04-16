@@ -353,7 +353,12 @@ async function run(): Promise<void> {
 
             if (repoProvider === 'GitHub' || repoProvider === 'GitHubEnterprise') {
                 try {
-                    const lsRemoteResult = spawnSync('git', ['ls-remote', 'origin', 'refs/pull/*'], {
+                    // Use refs/pull/*/merge (not refs/pull/*) because GitHub publishes two ref families per PR:
+                    //   refs/pull/{id}/head  — the source branch tip; GitHub keeps this FOREVER (open and closed PRs)
+                    //   refs/pull/{id}/merge — the would-be merge commit; exists ONLY while the PR is open and mergeable
+                    // Fetching refs/pull/* would therefore include every historical closed/merged PR as a "live" branch.
+                    // Filtering to refs/pull/*/merge gives us only currently open PRs.
+                    const lsRemoteResult = spawnSync('git', ['ls-remote', 'origin', 'refs/pull/*/merge'], {
                         encoding: 'utf-8',
                         cwd: repoPath
                     });

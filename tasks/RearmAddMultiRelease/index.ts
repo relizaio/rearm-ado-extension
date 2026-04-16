@@ -98,6 +98,182 @@ function extractReleaseUuid(output: string): string | null {
     }
 }
 
+async function syncBranchesForRepo(
+    rearmPath: string,
+    rearmApiKey: string,
+    rearmApiKeyId: string,
+    rearmUrl: string,
+    vcsUri: string,
+    repoPath: string
+): Promise<void> {
+    console.log('Synchronizing branches with ReARM...');
+    let liveBranches: string = '';
+    let skipBranchSync = false;
+
+    try {
+        // Get branches from git
+        const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
+            encoding: 'utf-8',
+            cwd: repoPath
+        });
+        const gitOutput = (result.stdout || '').trim();
+        console.log(`Git branch output: ${gitOutput || '(empty)'}`);
+
+        // Check if output looks like valid branch refs or just a detached commit hash
+        const lines = gitOutput.split('\n').filter(line => line.trim());
+        let validBranches = lines.filter(line => {
+            // Valid branch refs should not end with a 40-char hex commit hash
+            const branchName = line.replace('refs/remotes/origin/', '');
+            return !/^[0-9a-f]{40}$/i.test(branchName);
+        });
+
+        // Fetch PR branches - use git ls-remote for GitHub, ADO REST API for TfsGit
+        const repoProvider = tl.getVariable('Build.Repository.Provider');
+        const collectionUri = tl.getVariable('System.TeamFoundationCollectionUri');
+        const project = tl.getVariable('System.TeamProject');
+        // Note: Build.Repository.ID is always the primary pipeline repo. For secondary vcsUris
+        // in multi-repo scenarios, the ADO API will still be attempted but its repoId belongs
+        // to the primary repo — regular branches from git branch -r are still synced correctly.
+        const repoId = tl.getVariable('Build.Repository.ID');
+        const accessToken = tl.getVariable('System.AccessToken');
+
+        if (repoProvider === 'GitHub' || repoProvider === 'GitHubEnterprise') {
+            try {
+                // Use refs/pull/*/merge (not refs/pull/*) because GitHub publishes two ref families per PR:
+                //   refs/pull/{id}/head  — the source branch tip; GitHub keeps this FOREVER (open and closed PRs)
+                //   refs/pull/{id}/merge — the would-be merge commit; exists ONLY while the PR is open and mergeable
+                // Fetching refs/pull/* would therefore include every historical closed/merged PR as a "live" branch.
+                // Filtering to refs/pull/*/merge gives us only currently open PRs.
+                const lsRemoteResult = spawnSync('git', ['ls-remote', 'origin', 'refs/pull/*/merge'], {
+                    encoding: 'utf-8',
+                    cwd: repoPath
+                });
+                const lsOutput = (lsRemoteResult.stdout || '').trim();
+                if (lsOutput) {
+                    for (const line of lsOutput.split('\n').filter((l: string) => l.trim())) {
+                        const parts = line.split('\t');
+                        if (parts.length >= 2) {
+                            const ref = parts[1].trim();
+                            const remoteBranch = ref.replace('refs/pull/', 'refs/remotes/pull/');
+                            if (!validBranches.includes(remoteBranch)) {
+                                validBranches.push(remoteBranch);
+                                console.log(`Added PR branch: ${remoteBranch}`);
+                            }
+                        }
+                    }
+                    console.log(`Fetched PR refs via git ls-remote`);
+                } else {
+                    console.log('No PR refs found via git ls-remote');
+                }
+            } catch (lsErr) {
+                console.log(`Warning: Could not fetch PR refs via git ls-remote: ${lsErr}`);
+            }
+        } else if (collectionUri && project && repoId && accessToken) {
+            try {
+                const apiUrl = `${collectionUri}${project}/_apis/git/repositories/${repoId}/pullrequests?searchCriteria.status=active&api-version=7.1`;
+                console.log(`Fetching active PRs from Azure DevOps API...`);
+
+                const https = require('https');
+                const http = require('http');
+                const url = new URL(apiUrl);
+                const httpModule = url.protocol === 'https:' ? https : http;
+
+                const prBranches = await new Promise<string[]>((resolve) => {
+                    const req = httpModule.request(apiUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }, (res: any) => {
+                        let data = '';
+                        res.on('data', (chunk: string) => data += chunk);
+                        res.on('end', () => {
+                            try {
+                                const json = JSON.parse(data);
+                                if (json.value && Array.isArray(json.value)) {
+                                    const branches: string[] = [];
+                                    for (const pr of json.value) {
+                                        if (pr.sourceRefName) {
+                                            branches.push(pr.sourceRefName);
+                                        }
+                                        if (pr.pullRequestId) {
+                                            branches.push(`refs/pull/${pr.pullRequestId}/merge`);
+                                        }
+                                    }
+                                    console.log(`Found ${json.value.length} active PRs, ${branches.length} total refs`);
+                                    resolve(branches);
+                                } else {
+                                    console.log('No PRs found or unexpected API response');
+                                    resolve([]);
+                                }
+                            } catch (e) {
+                                console.log(`Warning: Failed to parse PR API response: ${e}`);
+                                resolve([]);
+                            }
+                        });
+                    });
+                    req.on('error', (e: Error) => {
+                        console.log(`Warning: PR API request failed: ${e.message}`);
+                        resolve([]);
+                    });
+                    req.end();
+                });
+
+                for (const prBranch of prBranches) {
+                    let remoteBranch: string;
+                    if (prBranch.startsWith('refs/pull/')) {
+                        remoteBranch = prBranch.replace('refs/pull/', 'refs/remotes/pull/');
+                    } else {
+                        remoteBranch = prBranch.replace('refs/heads/', 'refs/remotes/origin/');
+                    }
+                    if (!validBranches.includes(remoteBranch)) {
+                        validBranches.push(remoteBranch);
+                        console.log(`Added PR branch: ${remoteBranch}`);
+                    }
+                }
+            } catch (apiErr) {
+                console.log(`Warning: Could not fetch PRs from API: ${apiErr}`);
+            }
+        } else {
+            console.log('Skipping PR branch fetch: no supported provider detected or ADO API variables not available');
+        }
+
+        if (validBranches.length === 0 && lines.length > 0) {
+            console.log('Warning: Only detached commit refs found (shallow/detached checkout). Skipping branch sync.');
+            console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
+            skipBranchSync = true;
+        } else if (validBranches.length === 0) {
+            console.log('Warning: No branches found. Skipping branch sync.');
+            console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
+            skipBranchSync = true;
+        } else {
+            liveBranches = Buffer.from(validBranches.join('\n')).toString('base64').replace(/\n/g, '');
+        }
+    } catch (err) {
+        console.log(`Warning: Failed to get git branches: ${err}. Skipping branch sync.`);
+        console.log(`Make sure you use fetchDepth: 0 in your pipeline checkout step.`);
+        skipBranchSync = true;
+    }
+
+    if (!skipBranchSync) {
+        const syncBranches = tl.tool(rearmPath);
+        syncBranches.arg('syncbranches');
+        syncBranches.arg(['-k', rearmApiKey]);
+        syncBranches.arg(['-i', rearmApiKeyId]);
+        syncBranches.arg(['-u', rearmUrl]);
+        syncBranches.arg(['--vcsuri', vcsUri]);
+        syncBranches.arg(['--repo-path', repoPath]);
+        syncBranches.arg(['--livebranches', liveBranches]);
+
+        const syncResult = await syncBranches.execAsync();
+        if (syncResult !== 0) {
+            throw new Error(`ReARM syncbranches failed with exit code ${syncResult}`);
+        }
+        console.log('Branches synchronized successfully');
+    }
+}
+
 async function run(): Promise<void> {
     try {
         const rearmApiKey = tl.getInput('rearmApiKey', true)!;
@@ -162,6 +338,10 @@ async function run(): Promise<void> {
                 displayNameMap.set(uri, rel.vcsDisplayName);
             }
         }
+
+        // Track which (vcsUri, repoPath) pairs have had syncbranches called.
+        // syncbranches runs once per unique pair, after the first successful addrelease for that pair.
+        const syncedPairs = new Set<string>();
 
         // Process each release
         for (const rel of releases) {
@@ -435,6 +615,15 @@ async function run(): Promise<void> {
                         console.log('Warning: Could not extract release UUID from addrelease output');
                     }
                     firstCall = false;
+
+                    // Sync branches after first successful addrelease for this (vcsUri, repoPath) pair.
+                    // Done here (not before the loop) so the component already exists in ReARM when
+                    // syncbranches is called — important when createComponent is true.
+                    const syncKey = `${vcsUri}::${repoPath}`;
+                    if (!syncedPairs.has(syncKey)) {
+                        syncedPairs.add(syncKey);
+                        await syncBranchesForRepo(rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl, vcsUri, repoPath);
+                    }
                 }
             }
 

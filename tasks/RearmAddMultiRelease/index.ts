@@ -48,7 +48,6 @@ interface ReleaseEntry {
     commits?: string;
     releaseArts?: ReleaseArtifact[];
     sceArts?: ReleaseArtifact[];
-    runOnCondition?: boolean;
     datestart?: string;
     dateend?: string;
     deliverables?: Deliverable[];
@@ -410,7 +409,7 @@ async function run(): Promise<void> {
 
             console.log(`\nProcessing release: version=${rel.version}, repoPath=${repoPath}, vcsUri=${vcsUri}, branch=${branch}`);
 
-            // Call getlatestrelease to obtain lastCommit (for diff check and commits range)
+            // Call getlatestrelease to obtain lastCommit (for commits range only — no diff check, version is always from pipeline)
             let lastCommit = '';
             try {
                 const getLatestArgs = [
@@ -433,34 +432,8 @@ async function run(): Promise<void> {
                 console.log('No previous release found for this component, proceeding with build');
             }
 
-            // runOnCondition check — same diff logic as RearmReleaseInitialize
-            const runOnCondition = rel.runOnCondition !== false; // default true
-            if (runOnCondition) {
-                if (lastCommit && lastCommit !== 'null') {
-                    const commitExistsResult = spawnSync('git', ['cat-file', '-t', lastCommit], {
-                        encoding: 'utf-8',
-                        cwd: repoPath
-                    });
-                    if (commitExistsResult.status === 0) {
-                        const diffResult = spawnSync('git', ['diff', `${lastCommit}..${commit}`, '--', './'], {
-                            encoding: 'utf-8',
-                            cwd: repoPath
-                        });
-                        const diffOutput = (diffResult.stdout || '').trim();
-                        if (diffOutput === '') {
-                            console.log(`No changes detected since last release for version=${rel.version}. Skipping.`);
-                            continue;
-                        }
-                    } else {
-                        console.log(
-                            `Last commit ${lastCommit} not available locally (shallow checkout), assuming build is needed. ` +
-                            `Use fetchDepth: 0 in your pipeline checkout step to avoid this.`
-                        );
-                    }
-                } else {
-                    console.log('No previous release found, proceeding with release creation');
-                }
-            }
+            // Version is always provided by pipeline in this task — always proceed with release creation
+            console.log(`Version provided by pipeline (${rel.version}), skipping change detection, proceeding with release creation`);
 
             // Get commit message and date
             let commitMessage = '';

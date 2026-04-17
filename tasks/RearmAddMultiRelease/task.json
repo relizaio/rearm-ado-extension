@@ -4,13 +4,13 @@
     "name": "RearmAddMultiRelease",
     "friendlyName": "ReARM Add Multiple Releases",
     "description": "Self-sufficient task to add multiple releases to ReARM in one step. No initialize or finalize tasks required. Version must be provided per release.",
-    "helpMarkDown": "[Learn more about this task](https://github.com/relizaio/rearm-ado-extension)\n\nThe `releases` input accepts a JSON array of release objects. Each object supports the following fields:\n\n```json\n[\n  {\n    \"version\": \"1.0.0\",\n    \"lifecycle\": \"ASSEMBLED\",\n    \"repoPath\": \".\",\n    \"vcsUri\": \"\",\n    \"vcsDisplayName\": \"\",\n    \"branch\": \"\",\n    \"createComponent\": false,\n    \"createComponentName\": \"\",\n    \"createComponentVersionSchema\": \"semver\",\n    \"createComponentBranchVersionSchema\": \"semver\",\n    \"commits\": \"\",\n    \"releaseArts\": [],\n    \"sceArts\": [],\n    \"runOnCondition\": true,\n    \"datestart\": \"\",\n    \"dateend\": \"\",\n    \"deliverables\": [\n      {\n        \"odelId\": \"registry.example.com/myimage\",\n        \"odelType\": \"CONTAINER\",\n        \"odelDigests\": [\"sha256:abc123\"],\n        \"odelPurl\": \"pkg:oci/myimage@sha256:abc123\",\n        \"odelBuildId\": \"\",\n        \"odelBuildUri\": \"\",\n        \"odelCiMeta\": \"azuredevops\",\n        \"odelArtsJson\": []\n      }\n    ]\n  }\n]\n```",
+    "helpMarkDown": "[Learn more about this task](https://github.com/relizaio/rearm-ado-extension)\n\nThe `releases` input accepts a JSON array of release objects. Each object supports the following fields:\n\n```json\n[\n  {\n    \"version\": \"1.0.0\",\n    \"lifecycle\": \"ASSEMBLED\",\n    \"repoPath\": \".\",\n    \"vcsUri\": \"\",\n    \"vcsDisplayName\": \"\",\n    \"branch\": \"\",\n    \"createComponent\": false,\n    \"createComponentName\": \"\",\n    \"createComponentVersionSchema\": \"semver\",\n    \"createComponentBranchVersionSchema\": \"semver\",\n    \"commits\": \"\",\n    \"releaseArts\": [],\n    \"sceArts\": [],\n    \"datestart\": \"\",\n    \"dateend\": \"\",\n    \"deliverables\": [\n      {\n        \"odelId\": \"registry.example.com/myimage\",\n        \"odelType\": \"CONTAINER\",\n        \"odelDigests\": [\"sha256:abc123\"],\n        \"odelPurl\": \"pkg:oci/myimage@sha256:abc123\",\n        \"odelBuildId\": \"\",\n        \"odelBuildUri\": \"\",\n        \"odelCiMeta\": \"azuredevops\",\n        \"odelArtsJson\": []\n      }\n    ]\n  }\n]\n```",
     "category": "Utility",
     "author": "Reliza Incorporated",
     "version": {
         "Major": 1,
         "Minor": 3,
-        "Patch": 1
+        "Patch": 2
     },
     "instanceNameFormat": "Add Multiple Releases with ReARM",
     "inputs": [

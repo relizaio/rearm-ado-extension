@@ -255,7 +255,6 @@ steps:
             "createComponentName": "My Application",
             "createComponentVersionSchema": "semver",
             "createComponentBranchVersionSchema": "semver",
-            "runOnCondition": true,
             "datestart": "2026-04-11T10:00:00.000Z",
             "dateend": "2026-04-11T10:05:00.000Z",
             "sceArts": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./source-sbom.json"}],
@@ -362,8 +361,6 @@ steps:
 | `odelArtsJson` | No | - | JSON array of deliverable artifacts |
 | `sceArts` | No | - | JSON array of source code entry artifacts |
 | `releaseArts` | No | - | JSON array of release artifacts |
-| `runOnCondition` | No | `true` | Only run if DO_BUILD is true |
-| `createComponent` | No | `false` | Create component if it doesn't exist. Requires organization-wide read-write API key. |
 | `createComponentVersionSchema` | No | `semver` | Version schema for new component (semver, calver_reliza, calver_ubuntu, etc.) |
 | `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for new component |
 | `vcsDisplayName` | No | - | Display name for the VCS. Only used with createComponent. If not supplied, ReARM default logic will be used. |
@@ -398,7 +395,6 @@ Each element of the `releases` JSON array supports the following fields:
 | `commits` | No | Auto-fetched | Base64-encoded commits history. Auto-fetched from git (last 100 commits since previous release) if not provided. |
 | `releaseArts` | No | - | JSON array of release artifacts (release notes, security reports, etc.). Must be a JSON array, not a string. |
 | `sceArts` | No | - | JSON array of source code entry artifacts. Must be a JSON array, not a string. |
-| `runOnCondition` | No | `true` | When `true`, performs change detection (same logic as `RearmReleaseInitialize`): calls `getlatestrelease` and runs a git diff. The release is skipped if no changes are detected since the last release. Set to `false` to always submit regardless of changes. |
 | `datestart` | No | Task start time | ISO 8601 build start timestamp. Defaults to the time the task began executing. |
 | `dateend` | No | Time of submission | ISO 8601 build end timestamp. Defaults to the time just before each `addrelease` call. |
 | `deliverables` | No | `[]` | Array of deliverable objects (see schema below). If empty, the release is submitted with no deliverable. |

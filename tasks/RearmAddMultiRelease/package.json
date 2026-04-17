@@ -1,6 +1,6 @@
 {
     "name": "rearm-add-multi-release-task",
-    "version": "1.3.1",
+    "version": "1.3.2",
     "description": "Azure DevOps task to add multiple releases to ReARM in one step",
     "main": "index.js",
     "scripts": {

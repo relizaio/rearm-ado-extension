@@ -113,21 +113,27 @@ async function run(): Promise<void> {
         const rearmPath = tl.which('rearm', true);
         
         // Step 1: Get latest release and check if build is needed
-        console.log('Checking for changes since last release...');
         let doBuild = false;
         let lastCommit = '';
         
-        try {
-            const latestResult = getLatestRelease(
-                rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
-                vcsUri, repoPath, branch, commit, versionInput || undefined
-            );
-            doBuild = latestResult.doBuild;
-            lastCommit = latestResult.lastCommit;
-        } catch (err) {
-            // No previous release found, do build
-            console.log('No previous release found, build is needed');
+        if (versionInput) {
+            // Version provided by pipeline - always build
+            console.log('Version provided by pipeline, skipping change detection, DO_BUILD=true');
             doBuild = true;
+        } else {
+            console.log('Checking for changes since last release...');
+            try {
+                const latestResult = getLatestRelease(
+                    rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
+                    vcsUri, repoPath, branch, commit
+                );
+                doBuild = latestResult.doBuild;
+                lastCommit = latestResult.lastCommit;
+            } catch (err) {
+                // No previous release found, do build
+                console.log('No previous release found, build is needed');
+                doBuild = true;
+            }
         }
         
         console.log(`DO_BUILD: ${doBuild}`);

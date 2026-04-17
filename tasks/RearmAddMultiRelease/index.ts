@@ -1,5 +1,8 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 interface ArtifactTag {
     key: string;
@@ -284,13 +287,29 @@ async function syncBranchesForRepo(
         syncBranches.arg(['-u', rearmUrl]);
         syncBranches.arg(['--vcsuri', vcsUri]);
         syncBranches.arg(['--repo-path', repoPath]);
-        syncBranches.arg(['--livebranches', liveBranches]);
 
-        const syncResult = await syncBranches.execAsync();
-        if (syncResult !== 0) {
-            throw new Error(`ReARM syncbranches failed with exit code ${syncResult}`);
+        // For large branch payloads, write to a file to avoid shell argument length limits
+        let liveBranchesFile = '';
+        if (liveBranches.length > 2000) {
+            liveBranchesFile = path.join(os.tmpdir(), `rearm-livebranches-${Date.now()}.b64`);
+            fs.writeFileSync(liveBranchesFile, liveBranches);
+            console.log(`Live branches payload is ${liveBranches.length} chars, using --livebranchesfile: ${liveBranchesFile}`);
+            syncBranches.arg(['--livebranchesfile', liveBranchesFile]);
+        } else {
+            syncBranches.arg(['--livebranches', liveBranches]);
         }
-        console.log('Branches synchronized successfully');
+
+        try {
+            const syncResult = await syncBranches.execAsync();
+            if (syncResult !== 0) {
+                throw new Error(`ReARM syncbranches failed with exit code ${syncResult}`);
+            }
+            console.log('Branches synchronized successfully');
+        } finally {
+            if (liveBranchesFile) {
+                try { fs.unlinkSync(liveBranchesFile); } catch { /* ignore cleanup errors */ }
+            }
+        }
     }
 }
 

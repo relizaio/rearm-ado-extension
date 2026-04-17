@@ -37,7 +37,7 @@ steps:
   - task: RearmCliInstall@1
     name: RearmCliInstall  # Required to reference output variables
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - bash: |
       echo "RearmCli path: $(RearmCliInstall.RearmCli)"
@@ -79,7 +79,7 @@ Self-sufficient task to add multiple releases to ReARM in a single pipeline step
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - script: |
       rearm --version
@@ -92,7 +92,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - task: RearmReleaseInitialize@1
     inputs:
@@ -116,7 +116,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - task: RearmReleaseInitialize@1
     inputs:
@@ -153,7 +153,7 @@ The only mandatory field in each release object is `version`. All other fields a
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -174,7 +174,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -200,7 +200,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -234,7 +234,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -281,7 +281,7 @@ steps:
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -315,7 +315,7 @@ steps:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | No | `26.04.2` | Version of the ReARM CLI to install |
+| `rearmCliVersion` | No | `26.04.3` | Version of the ReARM CLI to install |
 
 ### RearmReleaseInitialize Inputs
 

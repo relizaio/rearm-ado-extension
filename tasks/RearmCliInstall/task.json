@@ -18,9 +18,9 @@
             "name": "rearmCliVersion",
             "type": "string",
             "label": "Rearm CLI Version",
-            "defaultValue": "26.04.2",
+            "defaultValue": "26.04.3",
             "required": false,
-            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.04.2')"
+            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.04.3')"
         }
     ],
     "outputVariables": [

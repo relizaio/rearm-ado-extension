@@ -43,7 +43,7 @@ This will create a `.vsix` file that can be uploaded to the Visual Studio Market
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.04.2'
+      rearmCliVersion: '26.04.3'
 
   - script: |
       $(RearmCli) --version
@@ -54,7 +54,7 @@ steps:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | Yes | `26.04.2` | Version of the Rearm CLI to install |
+| `rearmCliVersion` | Yes | `26.04.3` | Version of the Rearm CLI to install |
 
 ### Task Outputs
 

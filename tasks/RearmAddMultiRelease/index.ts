@@ -111,23 +111,6 @@ async function syncBranchesForRepo(
     let skipBranchSync = false;
 
     try {
-        // Get branches from git
-        const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
-            encoding: 'utf-8',
-            cwd: repoPath
-        });
-        const gitOutput = (result.stdout || '').trim();
-        console.log(`Git branch output: ${gitOutput || '(empty)'}`);
-
-        // Check if output looks like valid branch refs or just a detached commit hash
-        const lines = gitOutput.split('\n').filter(line => line.trim());
-        let validBranches = lines.filter(line => {
-            // Valid branch refs should not end with a 40-char hex commit hash
-            const branchName = line.replace('refs/remotes/origin/', '');
-            return !/^[0-9a-f]{40}$/i.test(branchName);
-        });
-
-        // Fetch PR branches - use git ls-remote for GitHub, ADO REST API for TfsGit
         const repoProvider = tl.getVariable('Build.Repository.Provider');
         const collectionUri = tl.getVariable('System.TeamFoundationCollectionUri');
         const project = tl.getVariable('System.TeamProject');
@@ -136,6 +119,44 @@ async function syncBranchesForRepo(
         // to the primary repo — regular branches from git branch -r are still synced correctly.
         const repoId = tl.getVariable('Build.Repository.ID');
         const accessToken = tl.getVariable('System.AccessToken');
+
+        const validBranches: string[] = [];
+        let rawLineCount = 0;
+
+        if (repoProvider === 'GitHub' || repoProvider === 'GitHubEnterprise') {
+            // Query remote directly — gets all branches including those not fetched locally
+            const result = spawnSync('git', ['ls-remote', 'origin', 'refs/heads/*'], {
+                encoding: 'utf-8',
+                cwd: repoPath
+            });
+            const gitOutput = (result.stdout || '').trim();
+            console.log(`Git ls-remote heads output: ${gitOutput || '(empty)'}`);
+            const lines = gitOutput.split('\n').filter(l => l.trim());
+            rawLineCount = lines.length;
+            for (const line of lines) {
+                const parts = line.split('\t');
+                if (parts.length >= 2) {
+                    const ref = parts[1].trim();
+                    if (!/^[0-9a-f]{40}$/i.test(ref)) validBranches.push(ref);
+                }
+            }
+        } else {
+            // ADO and others: use local remote-tracking cache
+            const result = spawnSync('git', ['branch', '-r', '--format=%(refname)'], {
+                encoding: 'utf-8',
+                cwd: repoPath
+            });
+            const gitOutput = (result.stdout || '').trim();
+            console.log(`Git branch output: ${gitOutput || '(empty)'}`);
+            const lines = gitOutput.split('\n').filter(l => l.trim());
+            rawLineCount = lines.length;
+            for (const line of lines) {
+                const branchName = line.replace('refs/remotes/origin/', '');
+                if (!/^[0-9a-f]{40}$/i.test(branchName)) validBranches.push(line);
+            }
+        }
+
+        // Fetch PR branches - use git ls-remote for GitHub, ADO REST API for TfsGit
 
         if (repoProvider === 'GitHub' || repoProvider === 'GitHubEnterprise') {
             try {
@@ -154,10 +175,9 @@ async function syncBranchesForRepo(
                         const parts = line.split('\t');
                         if (parts.length >= 2) {
                             const ref = parts[1].trim();
-                            const remoteBranch = ref.replace('refs/pull/', 'refs/remotes/pull/');
-                            if (!validBranches.includes(remoteBranch)) {
-                                validBranches.push(remoteBranch);
-                                console.log(`Added PR branch: ${remoteBranch}`);
+                            if (!validBranches.includes(ref)) {
+                                validBranches.push(ref);
+                                console.log(`Added PR branch: ${ref}`);
                             }
                         }
                     }
@@ -239,7 +259,8 @@ async function syncBranchesForRepo(
             console.log('Skipping PR branch fetch: no supported provider detected or ADO API variables not available');
         }
 
-        if (validBranches.length === 0 && lines.length > 0) {
+        if (validBranches.length === 0 && rawLineCount > 0) {
+            // Output was non-empty but all lines were filtered (detached HEAD / shallow checkout)
             console.log('Warning: Only detached commit refs found (shallow/detached checkout). Skipping branch sync.');
             console.log('To enable branch sync, use fetchDepth: 0 in your pipeline checkout step.');
             skipBranchSync = true;

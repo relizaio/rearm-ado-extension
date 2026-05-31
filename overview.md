@@ -36,8 +36,6 @@ To use the `RearmCli` variable in subsequent bash tasks, you must give the task 
 steps:
   - task: RearmCliInstall@1
     name: RearmCliInstall  # Required to reference output variables
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - bash: |
       echo "RearmCli path: $(RearmCliInstall.RearmCli)"
@@ -78,8 +76,6 @@ Self-sufficient task to add multiple releases to ReARM in a single pipeline step
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - script: |
       rearm --version
@@ -91,8 +87,6 @@ steps:
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - task: RearmReleaseInitialize@1
     inputs:
@@ -115,8 +109,6 @@ steps:
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - task: RearmReleaseInitialize@1
     inputs:
@@ -152,8 +144,6 @@ The only mandatory field in each release object is `version`. All other fields a
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -173,8 +163,6 @@ steps:
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -199,8 +187,6 @@ steps:
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -233,8 +219,6 @@ steps:
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -280,8 +264,6 @@ steps:
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - task: RearmAddMultiRelease@1
     inputs:
@@ -315,7 +297,8 @@ steps:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | No | `26.04.3` | Version of the ReARM CLI to install |
+| `rearmCliVersion` | No | `26.05.20` | Version of the ReARM CLI to install. Verified against a built-in SHA256 digest for the default version. |
+| `rearmCliSha256` | No | - | SHA256 digest of the CLI archive for your platform/arch. Required when overriding `rearmCliVersion` to a non-default version; otherwise the task falls back to the default pinned version. |
 
 ### RearmReleaseInitialize Inputs
 

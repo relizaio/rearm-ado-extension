@@ -9,8 +9,8 @@
     "author": "Reliza Incorporated",
     "version": {
         "Major": 1,
-        "Minor": 3,
-        "Patch": 3
+        "Minor": 4,
+        "Patch": 0
     },
     "instanceNameFormat": "Install Rearm CLI $(rearmCliVersion)",
     "inputs": [
@@ -20,7 +20,15 @@
             "label": "Rearm CLI Version",
             "defaultValue": "26.05.20",
             "required": false,
-            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.05.20'). First-class PullRequest support (--pr-* flags) requires 26.05.20 or later."
+            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.05.20'). The default version is verified against a SHA256 digest hardcoded into this task. First-class PullRequest support (--pr-* flags) requires 26.05.20 or later. To install a different version you MUST also provide its SHA256 digest via 'rearmCliSha256'; otherwise the task falls back to the default pinned version."
+        },
+        {
+            "name": "rearmCliSha256",
+            "type": "string",
+            "label": "Rearm CLI SHA256 Digest",
+            "defaultValue": "",
+            "required": false,
+            "helpMarkDown": "SHA256 digest of the Rearm CLI archive for your agent's platform/architecture (the hex value from sha256sums.txt, e.g. for 'rearm-<version>-linux-amd64.zip'). Required only when overriding 'rearmCliVersion' to a non-default version. Leave empty to use the default pinned version, which is verified against a built-in digest."
         }
     ],
     "outputVariables": [

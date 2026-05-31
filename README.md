@@ -42,19 +42,30 @@ This will create a `.vsix` file that can be uploaded to the Visual Studio Market
 ```yaml
 steps:
   - task: RearmCliInstall@1
-    inputs:
-      rearmCliVersion: '26.04.3'
 
   - script: |
       $(RearmCli) --version
     displayName: 'Run Rearm CLI'
 ```
 
+This installs the pinned default version, verified against a SHA256 digest hardcoded into the task. To install a different version, you **must** also supply its SHA256 digest:
+
+```yaml
+steps:
+  - task: RearmCliInstall@1
+    inputs:
+      rearmCliVersion: '26.05.21'
+      rearmCliSha256: '<sha256 of rearm-26.05.21-<platform>-<arch>.zip>'
+```
+
+If you override `rearmCliVersion` without providing `rearmCliSha256`, the task logs an error and falls back to the default pinned version instead of failing the pipeline.
+
 ### Task Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | Yes | `26.04.3` | Version of the Rearm CLI to install |
+| `rearmCliVersion` | No | `26.05.20` | Version of the Rearm CLI to install. Verified against a built-in SHA256 digest for the default version. |
+| `rearmCliSha256` | No | - | SHA256 digest of the CLI archive for your platform/arch. Required when overriding `rearmCliVersion` to a non-default version. |
 
 ### Task Outputs
 

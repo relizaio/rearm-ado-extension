@@ -18,9 +18,9 @@
             "name": "rearmCliVersion",
             "type": "string",
             "label": "Rearm CLI Version",
-            "defaultValue": "26.04.3",
+            "defaultValue": "26.05.20",
             "required": false,
-            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.04.3')"
+            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.05.20'). First-class PullRequest support (--pr-* flags) requires 26.05.20 or later."
         }
     ],
     "outputVariables": [

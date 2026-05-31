@@ -4,6 +4,59 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+function cleanRef(ref: string): string {
+    return ref.replace(/^refs\/heads\//, '');
+}
+
+// Best-effort web URL of an Azure Repos pull request. For non-TfsGit providers
+// (e.g. GitHub-connected pipelines) the endpoint is left unset rather than guessed.
+function buildPrEndpoint(identity: string): string {
+    if (!identity) return '';
+    const provider = tl.getVariable('Build.Repository.Provider') || '';
+    if (provider === 'TfsGit') {
+        const collectionUri = tl.getVariable('System.TeamFoundationCollectionUri') || '';
+        const project = tl.getVariable('System.TeamProject') || '';
+        const repoName = tl.getVariable('Build.Repository.Name') || '';
+        if (collectionUri && project && repoName) {
+            return `${collectionUri}${encodeURIComponent(project)}/_git/${encodeURIComponent(repoName)}/pullrequest/${identity}`;
+        }
+    } else if (provider === 'GitHub' || provider === 'GitHubEnterprise') {
+        const repoUri = (tl.getVariable('Build.Repository.Uri') || '').replace(/\.git$/, '').replace(/\/$/, '');
+        if (repoUri) {
+            return `${repoUri}/pull/${identity}`;
+        }
+    }
+    return '';
+}
+
+// First-class PullRequest flags for addrelease on PR-validation builds.
+// Empty when this is not a PR build.
+function buildPrArgs(): string[] {
+    const isPrBuild = tl.getVariable('Build.Reason') === 'PullRequest'
+        || !!tl.getVariable('System.PullRequest.PullRequestId');
+    if (!isPrBuild) {
+        return [];
+    }
+    // For GitHub-backed pipelines ADO assigns an internal PullRequestId that differs
+    // from the GitHub PR number; PullRequestNumber carries the real SCM-side number.
+    // Prefer it so the identity matches what other producers (e.g. the GitHub Action)
+    // use and both converge on the same first-class PullRequest. Azure Repos leaves
+    // PullRequestNumber empty, so fall back to PullRequestId (the PR number there).
+    const identity = tl.getVariable('System.PullRequest.PullRequestNumber')
+        || tl.getVariable('System.PullRequest.PullRequestId') || '';
+    if (!identity) {
+        return [];
+    }
+    const prArgs = ['--pr-identity', identity, '--pr-state', 'OPEN'];
+    const prSourceBranch = tl.getVariable('System.PullRequest.SourceBranch') || '';
+    const prTargetBranch = tl.getVariable('System.PullRequest.TargetBranch') || '';
+    if (prSourceBranch) prArgs.push('--pr-source-branch-name', cleanRef(prSourceBranch));
+    if (prTargetBranch) prArgs.push('--pr-target-branch-name', cleanRef(prTargetBranch));
+    const prEndpoint = buildPrEndpoint(identity);
+    if (prEndpoint) prArgs.push('--pr-endpoint', prEndpoint);
+    return prArgs;
+}
+
 interface ArtifactTag {
     key: string;
     value: string;
@@ -394,8 +447,20 @@ async function run(): Promise<void> {
                 );
             }
 
+            // On PR-validation builds the checkout is a detached merge ref, so
+            // git rev-parse yields HEAD and Build.SourceBranch is refs/pull/<id>/merge.
+            // Prefer the PR's source branch and carry the PR identity via the
+            // first-class PullRequest flags (prArgs) instead of a legacy PR branch.
+            const isPrBuild = tl.getVariable('Build.Reason') === 'PullRequest'
+                || !!tl.getVariable('System.PullRequest.PullRequestId');
+            const prSourceBranch = tl.getVariable('System.PullRequest.SourceBranch') || '';
+            const prArgs = buildPrArgs();
+
             // Resolve branch
             let branch = rel.branch || '';
+            if (!branch && isPrBuild && prSourceBranch) {
+                branch = prSourceBranch;
+            }
             if (!branch) {
                 const branchResult = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
                     encoding: 'utf-8',
@@ -519,6 +584,9 @@ async function run(): Promise<void> {
                 addRelease.arg(['-i', rearmApiKeyId]);
                 addRelease.arg(['-u', rearmUrl]);
                 addRelease.arg(['-b', branch]);
+                if (prArgs.length > 0) {
+                    addRelease.arg(prArgs);
+                }
                 addRelease.arg(['-v', rel.version]);
                 addRelease.arg(['--vcsuri', vcsUri]);
                 addRelease.arg(['--repo-path', repoPath]);

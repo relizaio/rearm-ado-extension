@@ -4,6 +4,59 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+function cleanRef(ref: string): string {
+    return ref.replace(/^refs\/heads\//, '');
+}
+
+// Best-effort web URL of an Azure Repos pull request. For non-TfsGit providers
+// (e.g. GitHub-connected pipelines) the endpoint is left unset rather than guessed.
+function buildPrEndpoint(identity: string): string {
+    if (!identity) return '';
+    const provider = tl.getVariable('Build.Repository.Provider') || '';
+    if (provider === 'TfsGit') {
+        const collectionUri = tl.getVariable('System.TeamFoundationCollectionUri') || '';
+        const project = tl.getVariable('System.TeamProject') || '';
+        const repoName = tl.getVariable('Build.Repository.Name') || '';
+        if (collectionUri && project && repoName) {
+            return `${collectionUri}${encodeURIComponent(project)}/_git/${encodeURIComponent(repoName)}/pullrequest/${identity}`;
+        }
+    } else if (provider === 'GitHub' || provider === 'GitHubEnterprise') {
+        const repoUri = (tl.getVariable('Build.Repository.Uri') || '').replace(/\.git$/, '').replace(/\/$/, '');
+        if (repoUri) {
+            return `${repoUri}/pull/${identity}`;
+        }
+    }
+    return '';
+}
+
+// First-class PullRequest flags for getversion/addrelease on PR-validation builds.
+// Empty when this is not a PR build.
+function buildPrArgs(): string[] {
+    const isPrBuild = tl.getVariable('Build.Reason') === 'PullRequest'
+        || !!tl.getVariable('System.PullRequest.PullRequestId');
+    if (!isPrBuild) {
+        return [];
+    }
+    // For GitHub-backed pipelines ADO assigns an internal PullRequestId that differs
+    // from the GitHub PR number; PullRequestNumber carries the real SCM-side number.
+    // Prefer it so the identity matches what other producers (e.g. the GitHub Action)
+    // use and both converge on the same first-class PullRequest. Azure Repos leaves
+    // PullRequestNumber empty, so fall back to PullRequestId (the PR number there).
+    const identity = tl.getVariable('System.PullRequest.PullRequestNumber')
+        || tl.getVariable('System.PullRequest.PullRequestId') || '';
+    if (!identity) {
+        return [];
+    }
+    const prArgs = ['--pr-identity', identity, '--pr-state', 'OPEN'];
+    const prSourceBranch = tl.getVariable('System.PullRequest.SourceBranch') || '';
+    const prTargetBranch = tl.getVariable('System.PullRequest.TargetBranch') || '';
+    if (prSourceBranch) prArgs.push('--pr-source-branch-name', cleanRef(prSourceBranch));
+    if (prTargetBranch) prArgs.push('--pr-target-branch-name', cleanRef(prTargetBranch));
+    const prEndpoint = buildPrEndpoint(identity);
+    if (prEndpoint) prArgs.push('--pr-endpoint', prEndpoint);
+    return prArgs;
+}
+
 interface LatestReleaseResult {
     doBuild: boolean;
     lastCommit: string;
@@ -80,7 +133,16 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
-        const branch = tl.getInput('branch', false) || tl.getVariable('Build.SourceBranch') || '';
+        // On Azure DevOps PR-validation builds Build.SourceBranch is the merge ref
+        // (refs/pull/<id>/merge), which ReARM records as a legacy PULL_REQUEST branch.
+        // Build on the PR's real source branch instead and carry PR identity/state via
+        // the first-class PullRequest flags (buildPrArgs) below.
+        const prSourceBranch = tl.getVariable('System.PullRequest.SourceBranch') || '';
+        const isPrBuild = tl.getVariable('Build.Reason') === 'PullRequest'
+            || !!tl.getVariable('System.PullRequest.PullRequestId');
+        const prBuildBranch = (isPrBuild && prSourceBranch) ? prSourceBranch : tl.getVariable('Build.SourceBranch');
+        const branch = tl.getInput('branch', false) || prBuildBranch || '';
+        const prArgs = buildPrArgs();
         const versionInput = tl.getInput('version', false) || '';
         const createComponent = tl.getBoolInput('createComponent', false);
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
@@ -217,6 +279,9 @@ async function run(): Promise<void> {
                 addRelease.arg(['--vcsuri', vcsUri]);
                 addRelease.arg(['--repo-path', repoPath]);
                 addRelease.arg(['--branch', branch]);
+                if (prArgs.length > 0) {
+                    addRelease.arg(prArgs);
+                }
                 addRelease.arg(['--lifecycle', 'PENDING']);
                 addRelease.arg(['--version', versionInput]);
                 if (commitsBase64) {
@@ -261,6 +326,9 @@ async function run(): Promise<void> {
                 getVersion.arg(['--vcstype', 'git']);
                 getVersion.arg(['--vcsuri', vcsUri]);
                 getVersion.arg(['--repo-path', repoPath]);
+                if (prArgs.length > 0) {
+                    getVersion.arg(prArgs);
+                }
                 if (commitsBase64) {
                     getVersion.arg(['--commits', commitsBase64]);
                 }

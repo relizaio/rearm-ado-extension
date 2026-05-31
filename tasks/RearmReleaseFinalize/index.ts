@@ -1,6 +1,59 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
 
+function cleanRef(ref: string): string {
+    return ref.replace(/^refs\/heads\//, '');
+}
+
+// Best-effort web URL of an Azure Repos pull request. For non-TfsGit providers
+// (e.g. GitHub-connected pipelines) the endpoint is left unset rather than guessed.
+function buildPrEndpoint(identity: string): string {
+    if (!identity) return '';
+    const provider = tl.getVariable('Build.Repository.Provider') || '';
+    if (provider === 'TfsGit') {
+        const collectionUri = tl.getVariable('System.TeamFoundationCollectionUri') || '';
+        const project = tl.getVariable('System.TeamProject') || '';
+        const repoName = tl.getVariable('Build.Repository.Name') || '';
+        if (collectionUri && project && repoName) {
+            return `${collectionUri}${encodeURIComponent(project)}/_git/${encodeURIComponent(repoName)}/pullrequest/${identity}`;
+        }
+    } else if (provider === 'GitHub' || provider === 'GitHubEnterprise') {
+        const repoUri = (tl.getVariable('Build.Repository.Uri') || '').replace(/\.git$/, '').replace(/\/$/, '');
+        if (repoUri) {
+            return `${repoUri}/pull/${identity}`;
+        }
+    }
+    return '';
+}
+
+// First-class PullRequest flags for addrelease on PR-validation builds.
+// Empty when this is not a PR build.
+function buildPrArgs(): string[] {
+    const isPrBuild = tl.getVariable('Build.Reason') === 'PullRequest'
+        || !!tl.getVariable('System.PullRequest.PullRequestId');
+    if (!isPrBuild) {
+        return [];
+    }
+    // For GitHub-backed pipelines ADO assigns an internal PullRequestId that differs
+    // from the GitHub PR number; PullRequestNumber carries the real SCM-side number.
+    // Prefer it so the identity matches what other producers (e.g. the GitHub Action)
+    // use and both converge on the same first-class PullRequest. Azure Repos leaves
+    // PullRequestNumber empty, so fall back to PullRequestId (the PR number there).
+    const identity = tl.getVariable('System.PullRequest.PullRequestNumber')
+        || tl.getVariable('System.PullRequest.PullRequestId') || '';
+    if (!identity) {
+        return [];
+    }
+    const prArgs = ['--pr-identity', identity, '--pr-state', 'OPEN'];
+    const prSourceBranch = tl.getVariable('System.PullRequest.SourceBranch') || '';
+    const prTargetBranch = tl.getVariable('System.PullRequest.TargetBranch') || '';
+    if (prSourceBranch) prArgs.push('--pr-source-branch-name', cleanRef(prSourceBranch));
+    if (prTargetBranch) prArgs.push('--pr-target-branch-name', cleanRef(prTargetBranch));
+    const prEndpoint = buildPrEndpoint(identity);
+    if (prEndpoint) prArgs.push('--pr-endpoint', prEndpoint);
+    return prArgs;
+}
+
 async function run(): Promise<void> {
     try {
         // Check if we should run based on DO_BUILD
@@ -17,7 +70,15 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
-        const branch = tl.getVariable('Build.SourceBranch') || '';
+        // On PR-validation builds Build.SourceBranch is the merge ref
+        // (refs/pull/<id>/merge); build on the PR's source branch instead so the
+        // release lands on a real branch (matching RearmReleaseInitialize) and the
+        // PR identity flows through the first-class PullRequest flags below.
+        const prSourceBranch = tl.getVariable('System.PullRequest.SourceBranch') || '';
+        const isPrBuild = tl.getVariable('Build.Reason') === 'PullRequest'
+            || !!tl.getVariable('System.PullRequest.PullRequestId');
+        const branch = (isPrBuild && prSourceBranch) ? prSourceBranch : (tl.getVariable('Build.SourceBranch') || '');
+        const prArgs = buildPrArgs();
         const version = tl.getVariable('REARM_FULL_VERSION') || '';
         const lifecycle = tl.getInput('lifecycle', false) || 'ASSEMBLED';
         
@@ -83,6 +144,9 @@ async function run(): Promise<void> {
         addRelease.arg(['-i', rearmApiKeyId]);
         addRelease.arg(['-u', rearmUrl]);
         addRelease.arg(['-b', branch]);
+        if (prArgs.length > 0) {
+            addRelease.arg(prArgs);
+        }
         addRelease.arg(['-v', version]);
         addRelease.arg(['--vcsuri', vcsUri]);
         addRelease.arg(['--repo-path', repoPath]);

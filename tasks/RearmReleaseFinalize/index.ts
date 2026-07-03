@@ -282,56 +282,7 @@ async function run(): Promise<void> {
         if (result.status !== 0) {
             throw new Error(`ReARM addrelease failed with exit code ${result.status}: ${rearmOutput}`);
         }
-        
-        // If lifecycle is ASSEMBLED, run the finalizer
-        if (lifecycle === 'ASSEMBLED') {
-            // Extract release UUID from output - find JSON object starting with {"data":
-            const jsonStart = rearmOutput.indexOf('{"data":');
-            let releaseUuid: string | null = null;
-            
-            if (jsonStart !== -1) {
-                try {
-                    // Find the matching closing brace
-                    let braceCount = 0;
-                    let jsonEnd = jsonStart;
-                    for (let i = jsonStart; i < rearmOutput.length; i++) {
-                        if (rearmOutput[i] === '{') braceCount++;
-                        if (rearmOutput[i] === '}') braceCount--;
-                        if (braceCount === 0) {
-                            jsonEnd = i + 1;
-                            break;
-                        }
-                    }
-                    const jsonStr = rearmOutput.substring(jsonStart, jsonEnd);
-                    const releaseData = JSON.parse(jsonStr);
-                    releaseUuid = releaseData?.data?.addReleaseProgrammatic?.uuid || null;
-                    
-                    if (releaseUuid) {
-                        console.log(`Finalizing release with UUID: ${releaseUuid}`);
-                        
-                        const finalizer = tl.tool(rearmPath);
-                        finalizer.arg('releasefinalizer');
-                        finalizer.arg(['--releaseid', releaseUuid]);
-                        finalizer.arg(['-k', rearmApiKey]);
-                        finalizer.arg(['-i', rearmApiKeyId]);
-                        finalizer.arg(['-u', rearmUrl]);
-                        
-                        const finalizerResult = await finalizer.execAsync();
-                        if (finalizerResult !== 0) {
-                            throw new Error(`ReARM releasefinalizer failed with exit code ${finalizerResult}`);
-                        }
-                        console.log('Release finalized successfully');
-                    } else {
-                        console.log('Warning: Could not extract release UUID for finalization');
-                    }
-                } catch (parseErr) {
-                    console.log(`Warning: Could not parse release response for finalization: ${parseErr}`);
-                }
-            } else {
-                console.log('Warning: No JSON response found for finalization');
-            }
-        }
-        
+
         tl.setResult(tl.TaskResult.Succeeded, 'Release metadata sent successfully');
     } catch (err: any) {
         tl.setResult(tl.TaskResult.Failed, err.message || 'Unknown error occurred');

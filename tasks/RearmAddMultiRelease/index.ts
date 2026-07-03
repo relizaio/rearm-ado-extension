@@ -132,27 +132,6 @@ function normalizeDigests(digests: string | string[] | undefined): string | unde
     return digests;
 }
 
-function extractReleaseUuid(output: string): string | null {
-    const jsonStart = output.indexOf('{"data":');
-    if (jsonStart === -1) return null;
-    try {
-        let braceCount = 0;
-        let jsonEnd = jsonStart;
-        for (let i = jsonStart; i < output.length; i++) {
-            if (output[i] === '{') braceCount++;
-            if (output[i] === '}') braceCount--;
-            if (braceCount === 0) {
-                jsonEnd = i + 1;
-                break;
-            }
-        }
-        const releaseData = JSON.parse(output.substring(jsonStart, jsonEnd));
-        return releaseData?.data?.addReleaseProgrammatic?.uuid || null;
-    } catch {
-        return null;
-    }
-}
-
 async function syncBranchesForRepo(
     rearmPath: string,
     rearmApiKey: string,
@@ -571,7 +550,6 @@ async function run(): Promise<void> {
                 ? rel.deliverables
                 : [null];
 
-            let releaseUuid: string | null = null;
             let firstCall = true;
 
             for (const deliverable of deliverables) {
@@ -687,14 +665,8 @@ async function run(): Promise<void> {
                     );
                 }
 
-                // Extract UUID from the first successful call
+                // Sync branches after the first successful addrelease for this release.
                 if (firstCall) {
-                    releaseUuid = extractReleaseUuid(rearmOutput);
-                    if (releaseUuid) {
-                        console.log(`Release UUID: ${releaseUuid}`);
-                    } else {
-                        console.log('Warning: Could not extract release UUID from addrelease output');
-                    }
                     firstCall = false;
 
                     // Sync branches after first successful addrelease for this (vcsUri, repoPath) pair.
@@ -706,25 +678,6 @@ async function run(): Promise<void> {
                         await syncBranchesForRepo(rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl, vcsUri, repoPath);
                     }
                 }
-            }
-
-            // Run releasefinalizer if lifecycle is ASSEMBLED
-            if (lifecycle === 'ASSEMBLED' && releaseUuid) {
-                console.log(`Finalizing release UUID: ${releaseUuid}`);
-                const finalizer = tl.tool(rearmPath);
-                finalizer.arg('releasefinalizer');
-                finalizer.arg(['--releaseid', releaseUuid]);
-                finalizer.arg(['-k', rearmApiKey]);
-                finalizer.arg(['-i', rearmApiKeyId]);
-                finalizer.arg(['-u', rearmUrl]);
-
-                const finalizerResult = await finalizer.execAsync();
-                if (finalizerResult !== 0) {
-                    throw new Error(`ReARM releasefinalizer failed for version=${rel.version} with exit code ${finalizerResult}`);
-                }
-                console.log(`Release ${rel.version} finalized successfully`);
-            } else if (lifecycle === 'ASSEMBLED' && !releaseUuid) {
-                console.log(`Warning: lifecycle is ASSEMBLED but no release UUID was extracted for version=${rel.version}. Skipping releasefinalizer.`);
             }
 
             console.log(`Release ${rel.version} processed successfully`);

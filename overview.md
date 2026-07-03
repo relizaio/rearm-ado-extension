@@ -53,12 +53,13 @@ Synchronizes branches, checks for changes since last release, and initializes a 
 
 ### RearmReleaseFinalize
 
-Finalizes a release in ReARM with deliverable metadata, artifacts, and runs the release finalizer. Supports:
+Finalizes a release in ReARM with deliverable metadata and artifacts. Supports:
 - Deliverable metadata (container images, binaries, etc.)
 - Source code entry artifacts (SCE artifacts)
 - Release artifacts (release notes, security reports)
 - Deliverable artifacts (SBOMs, attestations)
-- Automatic release finalization
+
+When the lifecycle is `ASSEMBLED`, the ReARM backend finalizes the release natively — no separate finalizer call is made by the task.
 
 ### RearmAddMultiRelease
 
@@ -66,7 +67,7 @@ Self-sufficient task to add multiple releases to ReARM in a single pipeline step
 - Multiple releases in one task invocation, each with independent repo path, VCS URI, branch, and lifecycle
 - Multiple deliverables per release (container images, libraries, etc.)
 - Per-release change detection — skips a release if no changes are detected since the last release (same logic as `RearmReleaseInitialize`)
-- Automatic release finalization when lifecycle is `ASSEMBLED`
+- Native backend finalization when lifecycle is `ASSEMBLED`
 - Component auto-creation per release
 
 ## Usage

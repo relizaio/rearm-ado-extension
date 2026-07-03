@@ -3,14 +3,14 @@
     "id": "82520d21-710e-446d-8838-23c0524ee5f0",
     "name": "RearmReleaseFinalize",
     "friendlyName": "ReARM Release Finalize",
-    "description": "Finalizes a release in ReARM with deliverable metadata, artifacts, and runs the release finalizer",
+    "description": "Finalizes a release in ReARM with deliverable metadata and artifacts",
     "helpMarkDown": "[Learn more about this task](https://github.com/relizaio/rearm-ado-extension)",
     "category": "Utility",
     "author": "Reliza Incorporated",
     "version": {
         "Major": 1,
         "Minor": 4,
-        "Patch": 0
+        "Patch": 1
     },
     "instanceNameFormat": "Finalize Release with ReARM",
     "inputs": [

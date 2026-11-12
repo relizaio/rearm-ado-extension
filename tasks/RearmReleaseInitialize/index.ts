@@ -51,13 +51,26 @@ function repoPathIdentity(repoPath: string): string {
 // (often multi-KB) message body. Trailer values must be space-free.
 const AGENTIC_TRAILER_FMT = '%(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)';
 
+// Commit-list entries are '%H|||%ad|||%s <trailers>|||%an|||%ae'. A commit without
+// agent trailers leaves a trailing space after its subject, so trim that field.
+function tidyCommitList(output: string): string {
+    return output.split('\n').map(line => {
+        const fields = line.split('|||');
+        if (fields.length >= 3) {
+            fields[2] = fields[2].trimEnd();
+        }
+        return fields.join('|||');
+    }).join('\n');
+}
+
 // Lifecycles that mean ReARM has already closed the release during getversion
 // (e.g. a component policy / release input trigger moved it there).
 const TERMINAL_LIFECYCLES = ['REJECTED', 'CANCELLED'];
 
 interface CommitSignature {
     sceArtsJson: string;
-    files: string[];
+    // Private temp directory holding the signature files; removed after the CLI call.
+    dir: string;
 }
 
 // Extracts the commit's gpgsig header (SSH or PGP) and the signed payload (the
@@ -112,14 +125,27 @@ function extractCommitSignature(commit: string, repoPath: string): CommitSignatu
         console.log('Warning: commit gpgsig header is neither SSH nor PGP, skipping signature pre-attach');
         return null;
     }
-    const tempDir = tl.getVariable('Agent.TempDirectory') || os.tmpdir();
-    const stamp = `${Date.now()}-${process.pid}`;
-    const sigFile = path.join(tempDir, `rearm-commit-signature-${stamp}.bin`);
-    const payloadFile = path.join(tempDir, `rearm-commit-signed-payload-${stamp}.bin`);
-    fs.writeFileSync(sigFile, Buffer.from(signatureLines.join('\n') + '\n', 'latin1'));
-    // Joining with '\n' restores the original bytes, including whether the
-    // object ended with a newline.
-    fs.writeFileSync(payloadFile, Buffer.from(payloadLines.join('\n'), 'latin1'));
+    // Write into a fresh directory that only this process created (mkdtemp, mode
+    // 0700), so a file or symlink planted at a predictable name in a shared temp
+    // directory (the os.tmpdir() fallback) can't be followed or read. Any failure
+    // here skips the pre-attach instead of failing the task.
+    const tempRoot = tl.getVariable('Agent.TempDirectory') || os.tmpdir();
+    let dir = '';
+    let sigFile: string;
+    let payloadFile: string;
+    try {
+        dir = fs.mkdtempSync(path.join(tempRoot, 'rearm-commit-signature-'));
+        sigFile = path.join(dir, 'commit-signature.bin');
+        payloadFile = path.join(dir, 'commit-signed-payload.bin');
+        fs.writeFileSync(sigFile, Buffer.from(signatureLines.join('\n') + '\n', 'latin1'), { flag: 'wx', mode: 0o600 });
+        // Joining with '\n' restores the original bytes, including whether the
+        // object ended with a newline.
+        fs.writeFileSync(payloadFile, Buffer.from(payloadLines.join('\n'), 'latin1'), { flag: 'wx', mode: 0o600 });
+    } catch (err: any) {
+        console.log(`Warning: could not write the commit signature files (${err.message}), skipping signature pre-attach`);
+        if (dir) removeDir(dir);
+        return null;
+    }
     const sceArts = [
         {
             type: 'SIGNATURE',
@@ -139,13 +165,11 @@ function extractCommitSignature(commit: string, repoPath: string): CommitSignatu
         }
     ];
     console.log(`Pre-attaching commit signature (${sigFormat} ${commit})`);
-    return { sceArtsJson: JSON.stringify(sceArts), files: [sigFile, payloadFile] };
+    return { sceArtsJson: JSON.stringify(sceArts), dir };
 }
 
-function removeFiles(files: string[]): void {
-    for (const f of files) {
-        try { fs.unlinkSync(f); } catch { /* ignore cleanup errors */ }
-    }
+function removeDir(dir: string): void {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore cleanup errors */ }
 }
 
 // Best-effort web URL of an Azure Repos pull request. For non-TfsGit providers
@@ -391,12 +415,12 @@ async function run(): Promise<void> {
                         'log', `${lastCommit}..${commit}`,
                         '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`, '--', './'
                     ], { encoding: 'utf-8', cwd: repoPath });
-                    commitsOutput = result.stdout || '';
+                    commitsOutput = tidyCommitList(result.stdout || '');
                 } else {
                     const result = spawnSync('git', [
                         'log', '-1', '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`
                     ], { encoding: 'utf-8', cwd: repoPath });
-                    commitsOutput = result.stdout || '';
+                    commitsOutput = tidyCommitList(result.stdout || '');
                 }
                 if (commitsOutput.trim()) {
                     commitsBase64 = Buffer.from(commitsOutput).toString('base64');
@@ -451,7 +475,7 @@ async function run(): Promise<void> {
                 try {
                     addResult = await addRelease.execAsync();
                 } finally {
-                    if (signature) removeFiles(signature.files);
+                    if (signature) removeDir(signature.dir);
                 }
                 if (addResult !== 0) {
                     throw new Error(`ReARM addrelease failed with exit code ${addResult}`);
@@ -520,7 +544,7 @@ async function run(): Promise<void> {
                         cwd: repoPath
                     });
                 } finally {
-                    if (signature) removeFiles(signature.files);
+                    if (signature) removeDir(signature.dir);
                 }
                 
                 getVersionOutput = (result.stdout || '') + (result.stderr || '');

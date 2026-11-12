@@ -8,6 +8,18 @@ import * as path from 'path';
 // both must send the same message, since ReARM keeps one entry per commit).
 const AGENTIC_TRAILER_FMT = '%(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)';
 
+// Commit-list entries are '%H|||%ad|||%s <trailers>|||%an|||%ae'. A commit without
+// agent trailers leaves a trailing space after its subject, so trim that field.
+function tidyCommitList(output: string): string {
+    return output.split('\n').map(line => {
+        const fields = line.split('|||');
+        if (fields.length >= 3) {
+            fields[2] = fields[2].trimEnd();
+        }
+        return fields.join('|||');
+    }).join('\n');
+}
+
 function cleanRef(ref: string): string {
     return ref.replace(/^refs\/heads\//, '');
 }
@@ -236,13 +248,13 @@ async function run(): Promise<void> {
                     'log', '-100', `${lastCommit}..${commit}`,
                     '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`, '--', './'
                 ], { encoding: 'utf-8', cwd: repoPath });
-                commitsOutput = result.stdout || '';
+                commitsOutput = tidyCommitList(result.stdout || '');
             } else {
                 // No last commit available, use current commit only
                 const result = spawnSync('git', [
                     'log', '-1', '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`
                 ], { encoding: 'utf-8', cwd: repoPath });
-                commitsOutput = result.stdout || '';
+                commitsOutput = tidyCommitList(result.stdout || '');
             }
             if (commitsOutput.trim()) {
                 const commitsBase64 = Buffer.from(commitsOutput).toString('base64');

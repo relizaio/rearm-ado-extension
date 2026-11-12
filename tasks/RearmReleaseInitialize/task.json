@@ -41,7 +41,7 @@
             "label": "Repository Path",
             "defaultValue": ".",
             "required": false,
-            "helpMarkDown": "Directory of the component inside the repository; git and the ReARM CLI run there (default: current directory). ReARM identifies and names the component by this path, so give it relative to the repository root, e.g. src/MyApp. An absolute path such as $(Build.SourcesDirectory)/src/MyApp also works: it is converted to the path relative to the repository root, with / separators, so it identifies the same component on any agent. An absolute path outside the checked-out repository fails the task. A relative path is sent as given, so ./src/MyApp and src/MyApp are different components."
+            "helpMarkDown": "Directory of the component inside the repository; git and the ReARM CLI run there (default: current directory). ReARM identifies and names the component by this path, so give it relative to the repository root, e.g. src/MyApp. An absolute path such as $(Build.SourcesDirectory)/src/MyApp also works: it is converted to the path relative to the repository root, with / separators, so it identifies the same component on any agent. An absolute path outside the checked-out repository fails the task. A relative path is normalized the same way (./src/MyApp, src\\\\MyApp and src/MyApp/ all become src/MyApp)."
         },
         {
             "name": "branch",

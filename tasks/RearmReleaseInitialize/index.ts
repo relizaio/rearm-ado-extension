@@ -15,10 +15,16 @@ function cleanRef(ref: string): string {
 // as 'D:\a\1\s\src\App'. An absolute path is converted to the path relative to
 // the git repository root, with '/' separators ('.' for the root itself), so it
 // identifies the same component as the equivalent relative path on any agent and
-// OS. A relative path is sent unchanged, so existing components keep their identity.
+// OS. A relative path is normalized to the same form: '\' becomes '/', and a
+// leading './', duplicate or trailing '/' and '.' segments are removed, so
+// './src/App', 'src\App' and 'src/App/' are all 'src/App'.
 function repoPathIdentity(repoPath: string): string {
     if (!path.isAbsolute(repoPath)) {
-        return repoPath;
+        const normalized = path.posix.normalize(repoPath.replace(/\\/g, '/')).replace(/\/+$/, '') || '.';
+        if (normalized !== repoPath) {
+            console.log(`repoPath '${repoPath}' identifies the component as repository path '${normalized}'`);
+        }
+        return normalized;
     }
     const hint = `Pass repoPath relative to the repository root (for example 'src/MyApp'), or an absolute path inside the checked-out repository.`;
     const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8', cwd: repoPath });

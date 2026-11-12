@@ -529,6 +529,12 @@ async function run(): Promise<void> {
                 // Ask for the release lifecycle on the response, so a release that
                 // ReARM already closed during getversion stops the pipeline below.
                 getVersion.arg('--include-lifecycle');
+                // On a rerun for a commit that already has a release on this branch,
+                // ReARM refuses getversion unless --rebuild is passed; with it, ReARM
+                // returns the existing version (releaseAlreadyExists) for the rebuild.
+                if (allowRebuild) {
+                    getVersion.arg('--rebuild');
+                }
                 // Attach the commit signature at creation time, so component policies
                 // that check the commit signature see a real verdict.
                 const signature = extractCommitSignature(commit, repoPath);
@@ -576,9 +582,12 @@ async function run(): Promise<void> {
                 console.log(`Got version from ReARM: ${fullVersion} (lifecycle: ${resolvedLifecycle || 'unknown'})`);
                 
                 // ReARM runs component release input triggers during getversion, so a
-                // policy may already have moved the release to a terminal lifecycle.
+                // policy may already have moved the new release to a terminal lifecycle.
                 // Nothing built from here on would be accepted, so stop the pipeline.
-                if (TERMINAL_LIFECYCLES.includes(resolvedLifecycle)) {
+                // Only for a release this call created: when the release already existed
+                // (a rebuild rerun), the lifecycle is the one an earlier run left, e.g.
+                // REJECTED after a failed build, and the rebuild replaces it.
+                if (!releaseAlreadyExists && TERMINAL_LIFECYCLES.includes(resolvedLifecycle)) {
                     throw new Error(`ReARM moved release ${fullVersion} to ${resolvedLifecycle} during getversion (component policy or trigger). Failing the build.`);
                 }
                 

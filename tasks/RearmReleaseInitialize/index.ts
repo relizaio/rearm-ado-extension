@@ -8,6 +8,38 @@ function cleanRef(ref: string): string {
     return ref.replace(/^refs\/heads\//, '');
 }
 
+// ReARM identifies (and names) a component by the repoPath it receives with the
+// VCS URI, so that value must be a stable repository-relative path. The repoPath
+// input is also the directory git and the CLI run in, and may be absolute, e.g.
+// '$(Build.SourcesDirectory)/src/App', which resolves to an agent-local path such
+// as 'D:\a\1\s\src\App'. An absolute path is converted to the path relative to
+// the git repository root, with '/' separators ('.' for the root itself), so it
+// identifies the same component as the equivalent relative path on any agent and
+// OS. A relative path is sent unchanged, so existing components keep their identity.
+function repoPathIdentity(repoPath: string): string {
+    if (!path.isAbsolute(repoPath)) {
+        return repoPath;
+    }
+    const hint = `Pass repoPath relative to the repository root (for example 'src/MyApp'), or an absolute path inside the checked-out repository.`;
+    const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8', cwd: repoPath });
+    const topLevel = (top.stdout || '').trim();
+    if (top.status !== 0 || !topLevel) {
+        throw new Error(`repoPath '${repoPath}' is an absolute path, but it is not a directory inside a git checkout, so its repository-relative path cannot be determined. ${hint}`);
+    }
+    let relative: string;
+    try {
+        relative = path.relative(fs.realpathSync.native(topLevel), fs.realpathSync.native(repoPath));
+    } catch (err: any) {
+        throw new Error(`repoPath '${repoPath}' could not be resolved: ${err.message}. ${hint}`);
+    }
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+        throw new Error(`repoPath '${repoPath}' is outside the git repository at '${topLevel}'. ${hint}`);
+    }
+    const identity = relative === '' ? '.' : relative.split(path.sep).join('/');
+    console.log(`Absolute repoPath '${repoPath}' identifies the component as repository path '${identity}'`);
+    return identity;
+}
+
 // AI-agent attribution trailers, appended onto the commit subject so the ReARM
 // backend's commit-trailer parser can read them without the CLI shipping the
 // (often multi-KB) message body. Trailer values must be space-free.
@@ -171,6 +203,7 @@ function getLatestRelease(
     rearmUrl: string,
     vcsUri: string,
     repoPath: string,
+    repoPathId: string,
     branch: string,
     commit: string,
     uptoVersion?: string
@@ -181,7 +214,7 @@ function getLatestRelease(
         '-i', rearmApiKeyId,
         '-u', rearmUrl,
         '--vcsuri', vcsUri,
-        '--repo-path', repoPath,
+        '--repo-path', repoPathId,
         '--branch', branch
     ];
     if (uptoVersion) {
@@ -235,6 +268,7 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
+        const repoPathId = repoPathIdentity(repoPath);
         // On Azure DevOps PR-validation builds Build.SourceBranch is the merge ref
         // (refs/pull/<id>/merge), which ReARM records as a legacy PULL_REQUEST branch.
         // Build on the PR's real source branch instead and carry PR identity/state via
@@ -269,6 +303,7 @@ async function run(): Promise<void> {
         
         console.log(`Repository URI: ${vcsUri}`);
         console.log(`Repository Path: ${repoPath}`);
+        console.log(`Repository Path sent to ReARM: ${repoPathId}`);
         console.log(`Branch: ${branch}`);
         console.log(`Commit: ${commit}`);
         if (versionInput) {
@@ -293,7 +328,7 @@ async function run(): Promise<void> {
             try {
                 const latestResult = getLatestRelease(
                     rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
-                    vcsUri, repoPath, branch, commit
+                    vcsUri, repoPath, repoPathId, branch, commit
                 );
                 doBuild = latestResult.doBuild;
                 lastCommit = latestResult.lastCommit;
@@ -380,7 +415,7 @@ async function run(): Promise<void> {
                 }
                 addRelease.arg(['--vcstype', 'git']);
                 addRelease.arg(['--vcsuri', vcsUri]);
-                addRelease.arg(['--repo-path', repoPath]);
+                addRelease.arg(['--repo-path', repoPathId]);
                 addRelease.arg(['--branch', branch]);
                 if (prArgs.length > 0) {
                     addRelease.arg(prArgs);
@@ -443,7 +478,7 @@ async function run(): Promise<void> {
                 }
                 getVersion.arg(['--vcstype', 'git']);
                 getVersion.arg(['--vcsuri', vcsUri]);
-                getVersion.arg(['--repo-path', repoPath]);
+                getVersion.arg(['--repo-path', repoPathId]);
                 if (prArgs.length > 0) {
                     getVersion.arg(prArgs);
                 }
@@ -523,7 +558,7 @@ async function run(): Promise<void> {
                     try {
                         const latestResult = getLatestRelease(
                             rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
-                            vcsUri, repoPath, branch, commit, fullVersion
+                            vcsUri, repoPath, repoPathId, branch, commit, fullVersion
                         );
                         doBuild = latestResult.doBuild;
                         lastCommit = latestResult.lastCommit;
@@ -723,7 +758,7 @@ async function run(): Promise<void> {
             syncBranches.arg(['-i', rearmApiKeyId]);
             syncBranches.arg(['-u', rearmUrl]);
             syncBranches.arg(['--vcsuri', vcsUri]);
-            syncBranches.arg(['--repo-path', repoPath]);
+            syncBranches.arg(['--repo-path', repoPathId]);
 
             // For large branch payloads, write to a file to avoid shell argument length limits
             let liveBranchesFile = '';

@@ -251,7 +251,7 @@ steps:
 | `rearmApiKey` | Yes | - | API Key for ReARM authentication |
 | `rearmApiKeyId` | Yes | - | API Key ID for ReARM authentication |
 | `rearmUrl` | Yes | - | ReARM server URL |
-| `repoPath` | No | `.` | Path to the repository |
+| `repoPath` | No | `.` | Directory of the component inside the repository; git and the CLI run there. ReARM identifies and names the component by this path, so give it relative to the repository root (e.g. `src/MyApp`). An absolute path such as `$(Build.SourcesDirectory)/src/MyApp` is converted to the repository-relative path with `/` separators; one outside the checked-out repository fails the task. A relative path is sent as given (`./src/MyApp` and `src/MyApp` are different components). |
 | `branch` | No | Current branch | Branch name |
 | `version` | No | - | Version string. If not provided, version is obtained from ReARM via getversion. |
 | `createComponent` | No | `false` | Create component if it doesn't exist. Requires organization-wide read-write API key. |
@@ -277,7 +277,7 @@ steps:
 | `rearmApiKey` | Yes | - | API Key for ReARM authentication |
 | `rearmApiKeyId` | Yes | - | API Key ID for ReARM authentication |
 | `rearmUrl` | Yes | - | ReARM server URL |
-| `repoPath` | No | `.` | Path to the repository |
+| `repoPath` | No | `.` | Directory of the component inside the repository; git and the CLI run there. ReARM identifies and names the component by this path, so give it relative to the repository root (e.g. `src/MyApp`). An absolute path such as `$(Build.SourcesDirectory)/src/MyApp` is converted to the repository-relative path with `/` separators; one outside the checked-out repository fails the task. A relative path is sent as given (`./src/MyApp` and `src/MyApp` are different components). |
 | `lifecycle` | No | `ASSEMBLED` | Release lifecycle (ASSEMBLED, DRAFT, REJECTED) |
 | `odelId` | No | - | Deliverable identifier (e.g., container image name) |
 | `odelType` | No | - | Deliverable type (CONTAINER, APPLICATION, LIBRARY, etc.) |

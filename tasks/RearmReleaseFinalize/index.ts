@@ -1,5 +1,7 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // AI-agent attribution trailers, appended onto the commit subject so the ReARM
 // backend's commit-trailer parser can read them (same format as RearmReleaseInitialize;
@@ -8,6 +10,38 @@ const AGENTIC_TRAILER_FMT = '%(trailers:key=ReARM-Agent,key=ReARM-Agentic-Sessio
 
 function cleanRef(ref: string): string {
     return ref.replace(/^refs\/heads\//, '');
+}
+
+// ReARM identifies (and names) a component by the repoPath it receives with the
+// VCS URI, so that value must be a stable repository-relative path. The repoPath
+// input is also the directory git and the CLI run in, and may be absolute, e.g.
+// '$(Build.SourcesDirectory)/src/App', which resolves to an agent-local path such
+// as 'D:\a\1\s\src\App'. An absolute path is converted to the path relative to
+// the git repository root, with '/' separators ('.' for the root itself), so it
+// identifies the same component as the equivalent relative path on any agent and
+// OS. A relative path is sent unchanged, so existing components keep their identity.
+function repoPathIdentity(repoPath: string): string {
+    if (!path.isAbsolute(repoPath)) {
+        return repoPath;
+    }
+    const hint = `Pass repoPath relative to the repository root (for example 'src/MyApp'), or an absolute path inside the checked-out repository.`;
+    const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8', cwd: repoPath });
+    const topLevel = (top.stdout || '').trim();
+    if (top.status !== 0 || !topLevel) {
+        throw new Error(`repoPath '${repoPath}' is an absolute path, but it is not a directory inside a git checkout, so its repository-relative path cannot be determined. ${hint}`);
+    }
+    let relative: string;
+    try {
+        relative = path.relative(fs.realpathSync.native(topLevel), fs.realpathSync.native(repoPath));
+    } catch (err: any) {
+        throw new Error(`repoPath '${repoPath}' could not be resolved: ${err.message}. ${hint}`);
+    }
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+        throw new Error(`repoPath '${repoPath}' is outside the git repository at '${topLevel}'. ${hint}`);
+    }
+    const identity = relative === '' ? '.' : relative.split(path.sep).join('/');
+    console.log(`Absolute repoPath '${repoPath}' identifies the component as repository path '${identity}'`);
+    return identity;
 }
 
 // Best-effort web URL of an Azure Repos pull request. For non-TfsGit providers
@@ -75,6 +109,7 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
+        const repoPathId = repoPathIdentity(repoPath);
         // On PR-validation builds Build.SourceBranch is the merge ref
         // (refs/pull/<id>/merge); build on the PR's source branch instead so the
         // release lands on a real branch (matching RearmReleaseInitialize) and the
@@ -135,6 +170,7 @@ async function run(): Promise<void> {
         
         console.log(`Repository URI: ${vcsUri}`);
         console.log(`Repository Path: ${repoPath}`);
+        console.log(`Repository Path sent to ReARM: ${repoPathId}`);
         console.log(`Branch: ${branch}`);
         console.log(`Commit: ${commit}`);
         console.log(`Version: ${version}`);
@@ -155,7 +191,7 @@ async function run(): Promise<void> {
         }
         addRelease.arg(['-v', version]);
         addRelease.arg(['--vcsuri', vcsUri]);
-        addRelease.arg(['--repo-path', repoPath]);
+        addRelease.arg(['--repo-path', repoPathId]);
         addRelease.arg(['--vcstype', 'git']);
         addRelease.arg(['--lifecycle', lifecycle]);
         

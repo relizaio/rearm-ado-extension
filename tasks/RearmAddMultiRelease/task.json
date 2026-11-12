@@ -3,14 +3,14 @@
     "id": "3f7a1d92-4c85-4e2b-b934-71d0e8f52c44",
     "name": "RearmAddMultiRelease",
     "friendlyName": "ReARM Add Multiple Releases",
-    "description": "Self-sufficient task to add multiple releases to ReARM in one step. No initialize or finalize tasks required. Version must be provided per release.",
-    "helpMarkDown": "[Learn more about this task](https://github.com/relizaio/rearm-ado-extension)\n\nThe `releases` input accepts a JSON array of release objects. Each object supports the following fields:\n\n```json\n[\n  {\n    \"version\": \"1.0.0\",\n    \"lifecycle\": \"ASSEMBLED\",\n    \"repoPath\": \".\",\n    \"vcsUri\": \"\",\n    \"vcsDisplayName\": \"\",\n    \"branch\": \"\",\n    \"createComponent\": false,\n    \"createComponentName\": \"\",\n    \"createComponentVersionSchema\": \"semver\",\n    \"createComponentBranchVersionSchema\": \"semver\",\n    \"commits\": \"\",\n    \"releaseArts\": [],\n    \"sceArts\": [],\n    \"datestart\": \"\",\n    \"dateend\": \"\",\n    \"deliverables\": [\n      {\n        \"odelId\": \"registry.example.com/myimage\",\n        \"odelType\": \"CONTAINER\",\n        \"odelDigests\": [\"sha256:abc123\"],\n        \"odelPurl\": \"pkg:oci/myimage@sha256:abc123\",\n        \"odelBuildId\": \"\",\n        \"odelBuildUri\": \"\",\n        \"odelCiMeta\": \"azuredevops\",\n        \"odelArtsJson\": []\n      }\n    ]\n  }\n]\n```",
+    "description": "Submit several ReARM releases in one all-or-nothing batch (rearm addreleases). The caller provides the complete batch JSON; the task derives nothing from the pipeline context.",
+    "helpMarkDown": "[Learn more about this task](https://github.com/relizaio/rearm-ado-extension)\n\nSubmits several ReARM releases in one all-or-nothing batch via `rearm addreleases`, so the backend fires product auto-integration once per affected feature set for the whole batch rather than once per release.\n\nProvide the batch as inline `releases` JSON **or** point `infile` at a file on disk (if both are set, `infile` wins). Each element is shaped exactly like the single-release `addrelease` input (`ReleaseInputProg`) — `component` (or `vcsUri` + `repoPath`), `branch`, `version`, `lifecycle`, optional `sourceCodeEntry`, `outboundDeliverables`, `artifacts`, plus per-release flags such as `rebuildRelease` and `createComponentIfMissing`. Artifacts reference local files via their `filePath` field, resolved relative to `workingDirectory`; the CLI reads and uploads each file.\n\n```json\n[\n  {\n    \"vcsUri\": \"github.com/acme/monorepo\",\n    \"repoPath\": \"services/widget\",\n    \"branch\": \"main\",\n    \"version\": \"1.4.0\",\n    \"lifecycle\": \"ASSEMBLED\",\n    \"rebuildRelease\": true,\n    \"sourceCodeEntry\": { \"commit\": \"9f1c2ab\", \"uri\": \"github.com/acme/monorepo\", \"type\": \"git\" },\n    \"outboundDeliverables\": [\n      {\n        \"displayIdentifier\": \"registry.acme.com/widget:1.4.0\",\n        \"type\": \"CONTAINER\",\n        \"softwareMetadata\": { \"packageType\": \"CONTAINER\", \"digests\": [\"sha256:abc123\"] },\n        \"artifacts\": [\n          { \"displayIdentifier\": \"widget-image-sbom\", \"type\": \"BOM\", \"bomFormat\": \"CYCLONEDX\", \"filePath\": \"./services/widget/sbom.cdx.json\" }\n        ]\n      }\n    ]\n  }\n]\n```\n\nFor the exact JSON shape, refer to the ReARM CLI documentation.",
     "category": "Utility",
     "author": "Reliza Incorporated",
     "version": {
         "Major": 1,
-        "Minor": 4,
-        "Patch": 1
+        "Minor": 5,
+        "Patch": 0
     },
     "instanceNameFormat": "Add Multiple Releases with ReARM",
     "inputs": [
@@ -36,19 +36,33 @@
             "helpMarkDown": "ReARM server URL"
         },
         {
-            "name": "allowRebuild",
-            "type": "boolean",
-            "label": "Allow Rebuild on CI Rerun",
-            "defaultValue": "false",
-            "required": false,
-            "helpMarkDown": "Allow rebuilding release on repeated CI reruns. If true, when a release with the same version already exists, it will be rebuilt instead of rejected. Applies to all releases."
-        },
-        {
             "name": "releases",
             "type": "multiLine",
             "label": "Releases JSON",
-            "required": true,
-            "helpMarkDown": "JSON array of release objects. Each release must have a 'version' field. See task documentation for the full schema."
+            "required": false,
+            "helpMarkDown": "JSON array of release objects (ReleaseInputProg shape). Provide this OR 'infile'; if both are set, 'infile' wins. Artifacts reference local files via their 'filePath' field, resolved relative to 'workingDirectory'. See task documentation for the schema."
+        },
+        {
+            "name": "infile",
+            "type": "string",
+            "label": "Batch File Path",
+            "required": false,
+            "helpMarkDown": "Path (relative to 'workingDirectory', or absolute) to a JSON file containing the release array. Takes precedence over 'releases'. Use when an earlier step has already written the batch to disk."
+        },
+        {
+            "name": "stripbom",
+            "type": "boolean",
+            "label": "Strip BOM for Digest Matching",
+            "defaultValue": "true",
+            "required": false,
+            "helpMarkDown": "Uncheck to disable BOM stripping for digest matching; applied to every artifact in the batch."
+        },
+        {
+            "name": "workingDirectory",
+            "type": "filePath",
+            "label": "Working Directory",
+            "required": false,
+            "helpMarkDown": "Process directory the CLI runs from — the base every artifact 'filePath' (and a relative 'infile') resolves against. NOT a per-release repo path; that is the 'repoPath' field inside each JSON element (paired with 'vcsUri'). Defaults to the pipeline workspace root."
         }
     ],
     "execution": {

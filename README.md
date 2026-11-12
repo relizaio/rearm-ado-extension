@@ -54,8 +54,8 @@ This installs the pinned default version, verified against a SHA256 digest hardc
 steps:
   - task: RearmCliInstall@1
     inputs:
-      rearmCliVersion: '26.05.21'
-      rearmCliSha256: '<sha256 of rearm-26.05.21-<platform>-<arch>.zip>'
+      rearmCliVersion: '26.05.20'
+      rearmCliSha256: '<sha256 of rearm-26.05.20-<platform>-<arch>.zip>'
 ```
 
 If you override `rearmCliVersion` without providing `rearmCliSha256`, the task logs an error and falls back to the default pinned version instead of failing the pipeline.

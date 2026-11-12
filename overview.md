@@ -63,12 +63,9 @@ When the lifecycle is `ASSEMBLED`, the ReARM backend finalizes the release nativ
 
 ### RearmAddMultiRelease
 
-Self-sufficient task to add multiple releases to ReARM in a single pipeline step. Does not require `RearmReleaseInitialize` or `RearmReleaseFinalize`. Each release entry must supply its own version. Supports:
-- Multiple releases in one task invocation, each with independent repo path, VCS URI, branch, and lifecycle
-- Multiple deliverables per release (container images, libraries, etc.)
-- Per-release change detection — skips a release if no changes are detected since the last release (same logic as `RearmReleaseInitialize`)
-- Native backend finalization when lifecycle is `ASSEMBLED`
-- Component auto-creation per release
+Submits several ReARM releases in one **all-or-nothing batch** via `rearm addreleases`. Unlike calling the single-release flow once per component, the backend fires product auto-integration only **once per affected feature set** for the whole batch (deduped) — use this when a CI run builds several component releases at once and you want a single product auto-integrate.
+
+This is a **standalone** task: it derives nothing from the pipeline context and builds no metadata for you — you hand it the complete batch JSON. Provide the batch as inline `releases` JSON **or** point `infile` at a file on disk (if both are set, `infile` wins). Each element is shaped exactly like the single-release `addrelease` input (`ReleaseInputProg`) — `component` (or `vcsUri` + `repoPath`), `branch`, `version`, `lifecycle`, optional `sourceCodeEntry`, `outboundDeliverables`, `artifacts`, plus per-release flags such as `rebuildRelease` and `createComponentIfMissing`. Artifacts reference local files via their `filePath` field (resolved relative to `workingDirectory`); the CLI reads and uploads each file — you do not embed file bytes in the JSON.
 
 ## Usage
 
@@ -136,30 +133,11 @@ steps:
 
 ### Add Multiple Releases
 
-Use `RearmAddMultiRelease` as a standalone task when you want to register one or more releases without a separate initialize/finalize pair. The `releases` input is a JSON array where each element configures one release independently.
+Use `RearmAddMultiRelease` as a standalone task to submit several releases in one all-or-nothing batch. You hand it the complete batch JSON — either inline via `releases` or as a file via `infile` — and the task passes it through to `rearm addreleases`. Unlike the single-release flow, the backend fires product auto-integration once per affected feature set for the whole batch.
 
-The only mandatory field in each release object is `version`. All other fields are optional — `vcsUri`, `branch`, and `commit` are auto-resolved from the pipeline context (`Build.Repository.Uri`, `Build.SourceBranch`, `Build.SourceVersion`) and will only need to be set explicitly in multi-repo scenarios or when overrides are required. For the full field reference with defaults and descriptions, see the [RearmAddMultiRelease reference tables](#rearmaddmultirelease-inputs) at the bottom of this document.
+Each element of the array is shaped exactly like the single-release `addrelease` input (`ReleaseInputProg`). Two distinct paths are in play — do not conflate them: `workingDirectory` is the **task input** (the process directory the CLI runs from, where each artifact `filePath` resolves), whereas `repoPath` is a **per-release JSON field** that identifies each component inside a monorepo (paired with `vcsUri`). One batch can span many components, each with its own `repoPath`. For the exact JSON shape, refer to the [ReARM CLI documentation](https://github.com/relizaio/rearm-cli#20-use-case-send-batched-release-metadata-to-rearm).
 
-**Single release, no deliverable:**
-
-```yaml
-steps:
-  - task: RearmCliInstall@1
-
-  - task: RearmAddMultiRelease@1
-    inputs:
-      rearmApiKey: '$(REARM_API_KEY)'
-      rearmApiKeyId: '$(REARM_API_KEY_ID)'
-      rearmUrl: 'https://your-rearm-server.com'
-      releases: |
-        [
-          {
-            "version": "$(MY_VERSION)"
-          }
-        ]
-```
-
-**Multiple releases from different repository paths:**
+**Inline JSON — a monorepo batch with two components:**
 
 ```yaml
 steps:
@@ -173,123 +151,85 @@ steps:
       releases: |
         [
           {
-            "version": "$(VERSION_BACKEND)",
-            "repoPath": "backend"
+            "vcsUri": "github.com/acme/monorepo",
+            "repoPath": "services/widget",
+            "branch": "main",
+            "version": "$(VERSION_WIDGET)",
+            "lifecycle": "ASSEMBLED",
+            "rebuildRelease": true,
+            "sourceCodeEntry": { "commit": "$(Build.SourceVersion)", "uri": "github.com/acme/monorepo", "type": "git" },
+            "artifacts": [
+              { "displayIdentifier": "widget-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "filePath": "./services/widget/sbom.cdx.json" }
+            ]
           },
           {
-            "version": "$(VERSION_FRONTEND)",
-            "repoPath": "frontend"
-          }
-        ]
-```
-
-**Release with a container deliverable:**
-
-```yaml
-steps:
-  - task: RearmCliInstall@1
-
-  - task: RearmAddMultiRelease@1
-    inputs:
-      rearmApiKey: '$(REARM_API_KEY)'
-      rearmApiKeyId: '$(REARM_API_KEY_ID)'
-      rearmUrl: 'https://your-rearm-server.com'
-      releases: |
-        [
-          {
-            "version": "$(MY_VERSION)",
-            "lifecycle": "ASSEMBLED",
-            "repoPath": ".",
-            "sceArts": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./source-sbom.json"}],
-            "releaseArts": [{"displayIdentifier": "release-notes", "type": "RELEASE_NOTES", "storedIn": "REARM", "filePath": "./CHANGELOG.md"}],
-            "deliverables": [
-              {
-                "odelId": "myregistry.azurecr.io/myapp",
-                "odelType": "CONTAINER",
-                "odelDigests": ["$(DOCKER_SHA_256)"],
-                "odelPurl": "pkg:oci/myapp@$(DOCKER_SHA_256)",
-                "odelArtsJson": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./sbom.json"}]
-              }
-            ]
-          }
-        ]
-```
-
-**All fields populated — one release, one deliverable:**
-
-```yaml
-steps:
-  - task: RearmCliInstall@1
-
-  - task: RearmAddMultiRelease@1
-    inputs:
-      rearmApiKey: '$(REARM_API_KEY)'
-      rearmApiKeyId: '$(REARM_API_KEY_ID)'
-      rearmUrl: 'https://your-rearm-server.com'
-      allowRebuild: false
-      releases: |
-        [
-          {
-            "version": "$(MY_VERSION)",
-            "lifecycle": "ASSEMBLED",
-            "repoPath": ".",
-            "vcsUri": "https://github.com/myorg/myrepo",
-            "vcsDisplayName": "My GitHub Repo",
+            "vcsUri": "github.com/acme/monorepo",
+            "repoPath": "services/gadget",
             "branch": "main",
-            "createComponent": true,
-            "createComponentName": "My Application",
-            "createComponentVersionSchema": "semver",
-            "createComponentBranchVersionSchema": "semver",
-            "datestart": "2026-04-11T10:00:00.000Z",
-            "dateend": "2026-04-11T10:05:00.000Z",
-            "sceArts": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./source-sbom.json"}],
-            "releaseArts": [{"displayIdentifier": "release-notes", "type": "RELEASE_NOTES", "storedIn": "REARM", "filePath": "./CHANGELOG.md"}],
-            "deliverables": [
-              {
-                "odelId": "myregistry.azurecr.io/myapp",
-                "odelType": "CONTAINER",
-                "odelDigests": ["sha256:abc123def456"],
-                "odelPurl": "pkg:oci/myapp@sha256:abc123def456",
-                "odelBuildId": "azuredevops$(Build.BuildNumber)",
-                "odelBuildUri": "$(Build.BuildUri)",
-                "odelCiMeta": "azuredevops",
-                "odelArtsJson": [{"bomFormat": "CYCLONEDX", "type": "BOM", "filePath": "./sbom.json"}]
-              }
+            "version": "$(VERSION_GADGET)",
+            "lifecycle": "ASSEMBLED",
+            "rebuildRelease": true,
+            "sourceCodeEntry": { "commit": "$(Build.SourceVersion)", "uri": "github.com/acme/monorepo", "type": "git" },
+            "artifacts": [
+              { "displayIdentifier": "gadget-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "filePath": "./services/gadget/sbom.cdx.json" }
             ]
           }
         ]
 ```
 
-**Release with multiple deliverables:**
+**From a file (`infile`) — mixing an existing component (by UUID) with a new one auto-created from its `vcsUri` + `repoPath`, plus a container deliverable and its SBOM:**
 
 ```yaml
 steps:
   - task: RearmCliInstall@1
+
+  - task: Bash@3
+    displayName: 'Write release batch'
+    inputs:
+      targetType: inline
+      script: |
+        mkdir -p reliza
+        cat > reliza/batch.json <<'EOF'
+        [
+          {
+            "component": "5a813e39-c453-444e-85cd-b618b7de6108",
+            "branch": "main",
+            "version": "1.4.0",
+            "lifecycle": "ASSEMBLED",
+            "rebuildRelease": true,
+            "artifacts": [
+              { "displayIdentifier": "widget-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "filePath": "./services/widget/sbom.cdx.json" }
+            ]
+          },
+          {
+            "vcsUri": "github.com/acme/monorepo",
+            "repoPath": "services/gizmo",
+            "branch": "main",
+            "version": "0.1.0",
+            "lifecycle": "ASSEMBLED",
+            "createComponentIfMissing": true,
+            "createComponentName": "gizmo",
+            "createComponentVersionSchema": "semver",
+            "outboundDeliverables": [
+              {
+                "displayIdentifier": "registry.acme.com/gizmo:0.1.0",
+                "type": "CONTAINER",
+                "softwareMetadata": { "packageType": "CONTAINER", "digests": ["sha256:abc123"] },
+                "artifacts": [
+                  { "displayIdentifier": "gizmo-image-sbom", "type": "BOM", "bomFormat": "CYCLONEDX", "filePath": "./services/gizmo/image-sbom.cdx.json" }
+                ]
+              }
+            ]
+          }
+        ]
+        EOF
 
   - task: RearmAddMultiRelease@1
     inputs:
       rearmApiKey: '$(REARM_API_KEY)'
       rearmApiKeyId: '$(REARM_API_KEY_ID)'
       rearmUrl: 'https://your-rearm-server.com'
-      releases: |
-        [
-          {
-            "version": "$(MY_VERSION)",
-            "lifecycle": "ASSEMBLED",
-            "deliverables": [
-              {
-                "odelId": "myregistry.azurecr.io/myapp-amd64",
-                "odelType": "CONTAINER",
-                "odelDigests": ["$(AMD64_DIGEST)"]
-              },
-              {
-                "odelId": "myregistry.azurecr.io/myapp-arm64",
-                "odelType": "CONTAINER",
-                "odelDigests": ["$(ARM64_DIGEST)"]
-              }
-            ]
-          }
-        ]
+      infile: 'reliza/batch.json'
 ```
 
 ## Task Reference
@@ -357,50 +297,34 @@ steps:
 | `rearmApiKey` | Yes | - | API Key for ReARM authentication |
 | `rearmApiKeyId` | Yes | - | API Key ID for ReARM authentication |
 | `rearmUrl` | Yes | - | ReARM server URL |
-| `allowRebuild` | No | `false` | Allow rebuilding releases on CI reruns. Applies to all releases. |
-| `releases` | Yes | - | JSON array of release objects (see schema below) |
+| `releases` | No | - | JSON array of release objects (`ReleaseInputProg` shape). Provide this **or** `infile`; if both are set, `infile` wins. |
+| `infile` | No | - | Path (relative to `workingDirectory`, or absolute) to a JSON file containing the release array. Takes precedence over `releases`. |
+| `stripbom` | No | `true` | Set to `false` to disable BOM stripping for digest matching; applied to every artifact in the batch. |
+| `workingDirectory` | No | Workspace root | Process directory the CLI runs from — the base every artifact `filePath` (and a relative `infile`) resolves against. **Not** a per-release repo path (that's the `repoPath` field inside each JSON element). |
 
 ### RearmAddMultiRelease — Per-Release Object Schema
 
-Each element of the `releases` JSON array supports the following fields:
+Each element of the batch array is shaped exactly like the single-release `addrelease` input (`ReleaseInputProg`). The task passes the JSON through to `rearm addreleases` unchanged, so the authoritative field reference is the [ReARM CLI documentation](https://github.com/relizaio/rearm-cli#20-use-case-send-batched-release-metadata-to-rearm). Commonly used fields:
 
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `version` | Yes | - | Version string for this release |
-| `lifecycle` | No | `ASSEMBLED` | Release lifecycle: `ASSEMBLED`, `DRAFT`, or `REJECTED` |
-| `repoPath` | No | `.` | Path to the repository for this release |
-| `vcsUri` | No | `Build.Repository.Uri` | Override the VCS URI. Defaults to the pipeline's repository URI. |
-| `vcsDisplayName` | No | - | Display name for the VCS. Only used with `createComponent`. All entries sharing the same `vcsUri` must use the same `vcsDisplayName`. |
-| `branch` | No | Auto-detected | Branch name. Auto-detected via `git rev-parse --abbrev-ref HEAD` at `repoPath` if not provided. |
-| `createComponent` | No | `false` | Create component if it doesn't exist. Requires organization-wide read-write API key. |
-| `createComponentName` | No | - | Name for the new component. Only used with `createComponent`. |
-| `createComponentVersionSchema` | No | `semver` | Version schema for the new component (`semver`, `calver_reliza`, `calver_ubuntu`, etc.) |
-| `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for the new component |
-| `commits` | No | Auto-fetched | Base64-encoded commits history. Auto-fetched from git (last 100 commits since previous release) if not provided. |
-| `releaseArts` | No | - | JSON array of release artifacts (release notes, security reports, etc.). Must be a JSON array, not a string. |
-| `sceArts` | No | - | JSON array of source code entry artifacts. Must be a JSON array, not a string. |
-| `datestart` | No | Task start time | ISO 8601 build start timestamp. Defaults to the time the task began executing. |
-| `dateend` | No | Time of submission | ISO 8601 build end timestamp. Defaults to the time just before each `addrelease` call. |
-| `deliverables` | No | `[]` | Array of deliverable objects (see schema below). If empty, the release is submitted with no deliverable. |
+| Field | Required | Description |
+|-------|----------|-------------|
+| `component` | One of `component` or (`vcsUri` + `repoPath`) | Component UUID for an existing component. |
+| `vcsUri` | One of `component` or (`vcsUri` + `repoPath`) | VCS URI identifying the component (paired with `repoPath`). |
+| `repoPath` | With `vcsUri` | Path identifying the component inside a monorepo. |
+| `branch` | Yes | Branch name for the release. |
+| `version` | Yes | Version string for the release. |
+| `lifecycle` | No | Release lifecycle: `ASSEMBLED`, `DRAFT`, or `REJECTED` (case-insensitive). |
+| `rebuildRelease` | No | Rebuild an existing release with the same version instead of rejecting it (e.g. on a CI rerun). |
+| `createComponentIfMissing` | No | Auto-create the component from `vcsUri` + `repoPath` if it does not exist. Requires an organization-wide read-write API key. |
+| `createComponentName` | No | Name for the auto-created component. |
+| `createComponentVersionSchema` | No | Version schema for the auto-created component (`semver`, `calver_reliza`, `calver_ubuntu`, etc.). |
+| `sourceCodeEntry` | No | Source code entry object (`commit`, `uri`, `type`, optional `artifacts`, etc.). |
+| `outboundDeliverables` | No | Array of deliverable objects (`displayIdentifier`, `type`, `softwareMetadata`, `artifacts`, etc.). |
+| `artifacts` | No | Release-level artifact objects. Each references a local file via its `filePath` (resolved relative to `workingDirectory`). |
 
-### RearmAddMultiRelease — Per-Deliverable Object Schema
-
-Each element of a release's `deliverables` array supports the following fields:
-
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `odelId` | Yes | - | Deliverable identifier (e.g., container image name such as `registry.example.com/myapp`). Entry is skipped if absent. |
-| `odelType` | Yes | - | CycloneDX deliverable type: `CONTAINER`, `APPLICATION`, `LIBRARY`, `FILE`, `FRAMEWORK`, or `PLATFORM` |
-| `odelDigests` | No | - | Digest(s) for the deliverable (e.g., `sha256:abc123`). String or array of strings. |
-| `odelPurl` | No | - | Package URL (PURL) for the deliverable. Prefixed with `PURL:` when submitted to ReARM. |
-| `odelBuildId` | No | `azuredevops<BuildNumber>` | Build identifier for the deliverable |
-| `odelBuildUri` | No | `Build.BuildUri` | URI of the build |
-| `odelCiMeta` | No | `azuredevops` | CI system metadata |
-| `odelArtsJson` | No | - | JSON array of deliverable artifacts (SBOMs, attestations, etc.). Must be a JSON array, not a string. |
-
-**Validation rules:**
-- No two releases may share the same combination of `vcsUri`, `repoPath`, and `version`.
-- All releases that share the same `vcsUri` must use the same `vcsDisplayName` (or omit it entirely).
+**Notes:**
+- The whole batch is sent in one all-or-nothing call — if any release fails, none are created.
+- Artifacts reference local files via their `filePath` field; the CLI reads and uploads each file. Do not embed file bytes in the JSON.
 
 ## Support
 

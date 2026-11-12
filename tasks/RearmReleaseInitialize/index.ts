@@ -1,11 +1,175 @@
 import * as tl from 'azure-pipelines-task-lib/task';
-import { spawnSync } from 'child_process';
+import { spawnSync, SpawnSyncReturns } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
 function cleanRef(ref: string): string {
     return ref.replace(/^refs\/heads\//, '');
+}
+
+// ReARM identifies (and names) a component by the repoPath it receives with the
+// VCS URI, so that value must be a stable repository-relative path. The repoPath
+// input is also the directory git and the CLI run in, and may be absolute, e.g.
+// '$(Build.SourcesDirectory)/src/App', which resolves to an agent-local path such
+// as 'D:\a\1\s\src\App'. An absolute path is converted to the path relative to
+// the git repository root, with '/' separators ('.' for the root itself), so it
+// identifies the same component as the equivalent relative path on any agent and
+// OS. A relative path is normalized to the same form: '\' becomes '/', and a
+// leading './', duplicate or trailing '/' and '.' segments are removed, so
+// './src/App', 'src\App' and 'src/App/' are all 'src/App'.
+function repoPathIdentity(repoPath: string): string {
+    if (!path.isAbsolute(repoPath)) {
+        const normalized = path.posix.normalize(repoPath.replace(/\\/g, '/')).replace(/\/+$/, '') || '.';
+        if (normalized !== repoPath) {
+            console.log(`repoPath '${repoPath}' identifies the component as repository path '${normalized}'`);
+        }
+        return normalized;
+    }
+    const hint = `Pass repoPath relative to the repository root (for example 'src/MyApp'), or an absolute path inside the checked-out repository.`;
+    const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8', cwd: repoPath });
+    const topLevel = (top.stdout || '').trim();
+    if (top.status !== 0 || !topLevel) {
+        throw new Error(`repoPath '${repoPath}' is an absolute path, but it is not a directory inside a git checkout, so its repository-relative path cannot be determined. ${hint}`);
+    }
+    let relative: string;
+    try {
+        relative = path.relative(fs.realpathSync.native(topLevel), fs.realpathSync.native(repoPath));
+    } catch (err: any) {
+        throw new Error(`repoPath '${repoPath}' could not be resolved: ${err.message}. ${hint}`);
+    }
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+        throw new Error(`repoPath '${repoPath}' is outside the git repository at '${topLevel}'. ${hint}`);
+    }
+    const identity = relative === '' ? '.' : relative.split(path.sep).join('/');
+    console.log(`Absolute repoPath '${repoPath}' identifies the component as repository path '${identity}'`);
+    return identity;
+}
+
+// AI-agent attribution trailers, appended onto the commit subject so the ReARM
+// backend's commit-trailer parser can read them without the CLI shipping the
+// (often multi-KB) message body. Trailer values must be space-free.
+const AGENTIC_TRAILER_FMT = '%(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)';
+
+// Commit-list entries are '%H|||%ad|||%s <trailers>|||%an|||%ae'. A commit without
+// agent trailers leaves a trailing space after its subject, so trim that field.
+function tidyCommitList(output: string): string {
+    return output.split('\n').map(line => {
+        const fields = line.split('|||');
+        if (fields.length >= 3) {
+            fields[2] = fields[2].trimEnd();
+        }
+        return fields.join('|||');
+    }).join('\n');
+}
+
+// Lifecycles that mean ReARM has already closed the release during getversion
+// (e.g. a component policy / release input trigger moved it there).
+const TERMINAL_LIFECYCLES = ['REJECTED', 'CANCELLED'];
+
+interface CommitSignature {
+    sceArtsJson: string;
+    // Private temp directory holding the signature files; removed after the CLI call.
+    dir: string;
+}
+
+// Extracts the commit's gpgsig header (SSH or PGP) and the signed payload (the
+// raw commit object without that header) into temp files, and returns the
+// --scearts JSON that attaches them to the source code entry, so ReARM can
+// verify the signature when the release is created. Returns null for unsigned
+// commits or when extraction fails. The payload must be byte-exact (what git
+// itself signs), so the commit object is handled as latin1, which maps every
+// byte to one character and back unchanged.
+function extractCommitSignature(commit: string, repoPath: string): CommitSignature | null {
+    const catFile = spawnSync('git', ['cat-file', 'commit', commit], { cwd: repoPath });
+    if (catFile.status !== 0 || !catFile.stdout) {
+        console.log(`Warning: could not read commit object ${commit}, skipping signature pre-attach`);
+        return null;
+    }
+    const lines = (catFile.stdout as Buffer).toString('latin1').split('\n');
+    const signatureLines: string[] = [];
+    const payloadLines: string[] = [];
+    let inHeader = true;
+    let inSig = false;
+    for (const line of lines) {
+        if (inHeader && line === '') {
+            inHeader = false;
+            inSig = false;
+            payloadLines.push(line);
+            continue;
+        }
+        if (inHeader) {
+            if (line.startsWith('gpgsig ')) {
+                inSig = true;
+                signatureLines.push(line.substring('gpgsig '.length));
+                continue;
+            }
+            if (inSig && line.startsWith(' ')) {
+                signatureLines.push(line.substring(1));
+                continue;
+            }
+            inSig = false;
+        }
+        payloadLines.push(line);
+    }
+    if (signatureLines.length === 0) {
+        console.log(`Commit ${commit} is unsigned, skipping signature pre-attach`);
+        return null;
+    }
+    let sigFormat = '';
+    if (signatureLines[0].includes('BEGIN SSH SIGNATURE')) {
+        sigFormat = 'SSH';
+    } else if (signatureLines[0].includes('BEGIN PGP SIGNATURE')) {
+        sigFormat = 'GPG';
+    } else {
+        console.log('Warning: commit gpgsig header is neither SSH nor PGP, skipping signature pre-attach');
+        return null;
+    }
+    // Write into a fresh directory that only this process created (mkdtemp, mode
+    // 0700), so a file or symlink planted at a predictable name in a shared temp
+    // directory (the os.tmpdir() fallback) can't be followed or read. Any failure
+    // here skips the pre-attach instead of failing the task.
+    const tempRoot = tl.getVariable('Agent.TempDirectory') || os.tmpdir();
+    let dir = '';
+    let sigFile: string;
+    let payloadFile: string;
+    try {
+        dir = fs.mkdtempSync(path.join(tempRoot, 'rearm-commit-signature-'));
+        sigFile = path.join(dir, 'commit-signature.bin');
+        payloadFile = path.join(dir, 'commit-signed-payload.bin');
+        fs.writeFileSync(sigFile, Buffer.from(signatureLines.join('\n') + '\n', 'latin1'), { flag: 'wx', mode: 0o600 });
+        // Joining with '\n' restores the original bytes, including whether the
+        // object ended with a newline.
+        fs.writeFileSync(payloadFile, Buffer.from(payloadLines.join('\n'), 'latin1'), { flag: 'wx', mode: 0o600 });
+    } catch (err: any) {
+        console.log(`Warning: could not write the commit signature files (${err.message}), skipping signature pre-attach`);
+        if (dir) removeDir(dir);
+        return null;
+    }
+    const sceArts = [
+        {
+            type: 'SIGNATURE',
+            filePath: sigFile,
+            displayIdentifier: `${commit}.sig`,
+            tags: [
+                { key: 'signatureSubject', value: 'COMMIT' },
+                { key: 'signatureFormat', value: sigFormat },
+                { key: 'signedCommitSha', value: commit }
+            ]
+        },
+        {
+            type: 'SIGNED_PAYLOAD',
+            filePath: payloadFile,
+            displayIdentifier: `${commit}.payload`,
+            tags: [{ key: 'signedCommitSha', value: commit }]
+        }
+    ];
+    console.log(`Pre-attaching commit signature (${sigFormat} ${commit})`);
+    return { sceArtsJson: JSON.stringify(sceArts), dir };
+}
+
+function removeDir(dir: string): void {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore cleanup errors */ }
 }
 
 // Best-effort web URL of an Azure Repos pull request. For non-TfsGit providers
@@ -69,6 +233,7 @@ function getLatestRelease(
     rearmUrl: string,
     vcsUri: string,
     repoPath: string,
+    repoPathId: string,
     branch: string,
     commit: string,
     uptoVersion?: string
@@ -79,7 +244,7 @@ function getLatestRelease(
         '-i', rearmApiKeyId,
         '-u', rearmUrl,
         '--vcsuri', vcsUri,
-        '--repo-path', repoPath,
+        '--repo-path', repoPathId,
         '--branch', branch
     ];
     if (uptoVersion) {
@@ -133,6 +298,7 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
+        const repoPathId = repoPathIdentity(repoPath);
         // On Azure DevOps PR-validation builds Build.SourceBranch is the merge ref
         // (refs/pull/<id>/merge), which ReARM records as a legacy PULL_REQUEST branch.
         // Build on the PR's real source branch instead and carry PR identity/state via
@@ -148,6 +314,7 @@ async function run(): Promise<void> {
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
         const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
         const vcsDisplayName = tl.getInput('vcsDisplayName', false);
+        const perspective = tl.getInput('perspective', false) || '';
         const allowRebuild = tl.getBoolInput('allowRebuild', false);
         
         // Get repository URI and commit from Azure DevOps predefined variables
@@ -166,6 +333,7 @@ async function run(): Promise<void> {
         
         console.log(`Repository URI: ${vcsUri}`);
         console.log(`Repository Path: ${repoPath}`);
+        console.log(`Repository Path sent to ReARM: ${repoPathId}`);
         console.log(`Branch: ${branch}`);
         console.log(`Commit: ${commit}`);
         if (versionInput) {
@@ -190,7 +358,7 @@ async function run(): Promise<void> {
             try {
                 const latestResult = getLatestRelease(
                     rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
-                    vcsUri, repoPath, branch, commit
+                    vcsUri, repoPath, repoPathId, branch, commit
                 );
                 doBuild = latestResult.doBuild;
                 lastCommit = latestResult.lastCommit;
@@ -224,7 +392,7 @@ async function run(): Promise<void> {
             let commitMessage = '';
             let commitDate = '';
             try {
-                const msgResult = spawnSync('git', ['log', '-1', '--pretty=%s'], {
+                const msgResult = spawnSync('git', ['log', '-1', `--pretty=%s ${AGENTIC_TRAILER_FMT}`], {
                     encoding: 'utf-8',
                     cwd: repoPath
                 });
@@ -245,14 +413,14 @@ async function run(): Promise<void> {
                 if (lastCommit && lastCommit !== 'null') {
                     const result = spawnSync('git', [
                         'log', `${lastCommit}..${commit}`,
-                        '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae', '--', './'
+                        '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`, '--', './'
                     ], { encoding: 'utf-8', cwd: repoPath });
-                    commitsOutput = result.stdout || '';
+                    commitsOutput = tidyCommitList(result.stdout || '');
                 } else {
                     const result = spawnSync('git', [
-                        'log', '-1', '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae'
+                        'log', '-1', '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`
                     ], { encoding: 'utf-8', cwd: repoPath });
-                    commitsOutput = result.stdout || '';
+                    commitsOutput = tidyCommitList(result.stdout || '');
                 }
                 if (commitsOutput.trim()) {
                     commitsBase64 = Buffer.from(commitsOutput).toString('base64');
@@ -277,7 +445,7 @@ async function run(): Promise<void> {
                 }
                 addRelease.arg(['--vcstype', 'git']);
                 addRelease.arg(['--vcsuri', vcsUri]);
-                addRelease.arg(['--repo-path', repoPath]);
+                addRelease.arg(['--repo-path', repoPathId]);
                 addRelease.arg(['--branch', branch]);
                 if (prArgs.length > 0) {
                     addRelease.arg(prArgs);
@@ -291,14 +459,29 @@ async function run(): Promise<void> {
                     addRelease.arg(['--createcomponent', 'true']);
                     addRelease.arg(['--createcomponent-version-schema', createComponentVersionSchema]);
                     addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
+                    if (perspective) {
+                        addRelease.arg(['--perspective', perspective]);
+                    }
                 }
                 if (allowRebuild) {
                     addRelease.arg(['--rebuild', 'true']);
                 }
+                const signature = extractCommitSignature(commit, repoPath);
+                if (signature) {
+                    addRelease.arg(['--scearts', signature.sceArtsJson]);
+                }
                 
-                const addResult = await addRelease.execAsync();
+                let addResult: number;
+                try {
+                    addResult = await addRelease.execAsync();
+                } finally {
+                    if (signature) removeDir(signature.dir);
+                }
                 if (addResult !== 0) {
                     throw new Error(`ReARM addrelease failed with exit code ${addResult}`);
+                }
+                if (signature) {
+                    tl.setVariable('REARM_SIGNATURE_PRE_ATTACHED', 'true');
                 }
                 
                 // Both versions are the same when provided via input
@@ -325,7 +508,7 @@ async function run(): Promise<void> {
                 }
                 getVersion.arg(['--vcstype', 'git']);
                 getVersion.arg(['--vcsuri', vcsUri]);
-                getVersion.arg(['--repo-path', repoPath]);
+                getVersion.arg(['--repo-path', repoPathId]);
                 if (prArgs.length > 0) {
                     getVersion.arg(prArgs);
                 }
@@ -339,13 +522,36 @@ async function run(): Promise<void> {
                     if (vcsDisplayName) {
                         getVersion.arg(['--vcs-display-name', vcsDisplayName]);
                     }
+                    if (perspective) {
+                        getVersion.arg(['--perspective', perspective]);
+                    }
+                }
+                // Ask for the release lifecycle on the response, so a release that
+                // ReARM already closed during getversion stops the pipeline below.
+                getVersion.arg('--include-lifecycle');
+                // On a rerun for a commit that already has a release on this branch,
+                // ReARM refuses getversion unless --rebuild is passed; with it, ReARM
+                // returns the existing version (releaseAlreadyExists) for the rebuild.
+                if (allowRebuild) {
+                    getVersion.arg('--rebuild');
+                }
+                // Attach the commit signature at creation time, so component policies
+                // that check the commit signature see a real verdict.
+                const signature = extractCommitSignature(commit, repoPath);
+                if (signature) {
+                    getVersion.arg(['--scearts', signature.sceArtsJson]);
                 }
                 
                 // Execute using spawnSync to reliably capture output
-                const result = spawnSync(rearmPath, (getVersion as any).args, {
-                    encoding: 'utf-8',
-                    cwd: repoPath
-                });
+                let result: SpawnSyncReturns<string>;
+                try {
+                    result = spawnSync(rearmPath, (getVersion as any).args, {
+                        encoding: 'utf-8',
+                        cwd: repoPath
+                    });
+                } finally {
+                    if (signature) removeDir(signature.dir);
+                }
                 
                 getVersionOutput = (result.stdout || '') + (result.stderr || '');
                 console.log(`ReARM getversion output: ${getVersionOutput}`);
@@ -353,8 +559,13 @@ async function run(): Promise<void> {
                 if (result.status !== 0) {
                     throw new Error(`ReARM getversion failed with exit code ${result.status}: ${getVersionOutput}`);
                 }
+                if (signature) {
+                    tl.setVariable('REARM_SIGNATURE_PRE_ATTACHED', 'true');
+                }
                 
                 // Parse version from JSON response - find JSON object in output
+                let releaseAlreadyExists = false;
+                let resolvedLifecycle = '';
                 try {
                     const jsonMatch = getVersionOutput.match(/\{[^{}]*"version"[^{}]*\}/);
                     if (!jsonMatch) {
@@ -363,31 +574,42 @@ async function run(): Promise<void> {
                     const versionData = JSON.parse(jsonMatch[0]);
                     fullVersion = versionData.version || '';
                     shortVersion = versionData.dockerTagSafeVersion || fullVersion;
-                    const releaseAlreadyExists = versionData.releaseAlreadyExists === true;
-                    console.log(`Got version from ReARM: ${fullVersion}`);
-                    
-                    // If release already exists and no input version was provided, re-check with the obtained version
-                    if (releaseAlreadyExists) {
-                        console.log('Release already exists, re-checking latest release with obtained version...');
-                        try {
-                            const latestResult = getLatestRelease(
-                                rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
-                                vcsUri, repoPath, branch, commit, fullVersion
-                            );
-                            doBuild = latestResult.doBuild;
-                            lastCommit = latestResult.lastCommit;
-                            // Update the output variables with new values
-                            tl.setVariable('DO_BUILD', String(doBuild));
-                            tl.setVariable('DoBuild', String(doBuild), false, true);
-                            tl.setVariable('LAST_COMMIT', lastCommit);
-                            tl.setVariable('LastCommit', lastCommit, false, true);
-                            console.log(`Updated DO_BUILD: ${doBuild}`);
-                        } catch (err) {
-                            console.log('Could not get latest release for existing version, keeping original doBuild value');
-                        }
-                    }
+                    releaseAlreadyExists = versionData.releaseAlreadyExists === true;
+                    resolvedLifecycle = versionData.lifecycle || '';
                 } catch (parseErr) {
                     throw new Error(`Failed to parse version response: ${getVersionOutput}`);
+                }
+                console.log(`Got version from ReARM: ${fullVersion} (lifecycle: ${resolvedLifecycle || 'unknown'})`);
+                
+                // ReARM runs component release input triggers during getversion, so a
+                // policy may already have moved the new release to a terminal lifecycle.
+                // Nothing built from here on would be accepted, so stop the pipeline.
+                // Only for a release this call created: when the release already existed
+                // (a rebuild rerun), the lifecycle is the one an earlier run left, e.g.
+                // REJECTED after a failed build, and the rebuild replaces it.
+                if (!releaseAlreadyExists && TERMINAL_LIFECYCLES.includes(resolvedLifecycle)) {
+                    throw new Error(`ReARM moved release ${fullVersion} to ${resolvedLifecycle} during getversion (component policy or trigger). Failing the build.`);
+                }
+                
+                // If release already exists and no input version was provided, re-check with the obtained version
+                if (releaseAlreadyExists) {
+                    console.log('Release already exists, re-checking latest release with obtained version...');
+                    try {
+                        const latestResult = getLatestRelease(
+                            rearmPath, rearmApiKey, rearmApiKeyId, rearmUrl,
+                            vcsUri, repoPath, repoPathId, branch, commit, fullVersion
+                        );
+                        doBuild = latestResult.doBuild;
+                        lastCommit = latestResult.lastCommit;
+                        // Update the output variables with new values
+                        tl.setVariable('DO_BUILD', String(doBuild));
+                        tl.setVariable('DoBuild', String(doBuild), false, true);
+                        tl.setVariable('LAST_COMMIT', lastCommit);
+                        tl.setVariable('LastCommit', lastCommit, false, true);
+                        console.log(`Updated DO_BUILD: ${doBuild}`);
+                    } catch (err) {
+                        console.log('Could not get latest release for existing version, keeping original doBuild value');
+                    }
                 }
                 
                 console.log('Pending release initialized successfully via getversion');
@@ -575,7 +797,7 @@ async function run(): Promise<void> {
             syncBranches.arg(['-i', rearmApiKeyId]);
             syncBranches.arg(['-u', rearmUrl]);
             syncBranches.arg(['--vcsuri', vcsUri]);
-            syncBranches.arg(['--repo-path', repoPath]);
+            syncBranches.arg(['--repo-path', repoPathId]);
 
             // For large branch payloads, write to a file to avoid shell argument length limits
             let liveBranchesFile = '';

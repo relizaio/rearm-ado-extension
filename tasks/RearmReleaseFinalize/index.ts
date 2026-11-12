@@ -1,8 +1,65 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// AI-agent attribution trailers, appended onto the commit subject so the ReARM
+// backend's commit-trailer parser can read them (same format as RearmReleaseInitialize;
+// both must send the same message, since ReARM keeps one entry per commit).
+const AGENTIC_TRAILER_FMT = '%(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)';
+
+// Commit-list entries are '%H|||%ad|||%s <trailers>|||%an|||%ae'. A commit without
+// agent trailers leaves a trailing space after its subject, so trim that field.
+function tidyCommitList(output: string): string {
+    return output.split('\n').map(line => {
+        const fields = line.split('|||');
+        if (fields.length >= 3) {
+            fields[2] = fields[2].trimEnd();
+        }
+        return fields.join('|||');
+    }).join('\n');
+}
 
 function cleanRef(ref: string): string {
     return ref.replace(/^refs\/heads\//, '');
+}
+
+// ReARM identifies (and names) a component by the repoPath it receives with the
+// VCS URI, so that value must be a stable repository-relative path. The repoPath
+// input is also the directory git and the CLI run in, and may be absolute, e.g.
+// '$(Build.SourcesDirectory)/src/App', which resolves to an agent-local path such
+// as 'D:\a\1\s\src\App'. An absolute path is converted to the path relative to
+// the git repository root, with '/' separators ('.' for the root itself), so it
+// identifies the same component as the equivalent relative path on any agent and
+// OS. A relative path is normalized to the same form: '\' becomes '/', and a
+// leading './', duplicate or trailing '/' and '.' segments are removed, so
+// './src/App', 'src\App' and 'src/App/' are all 'src/App'.
+function repoPathIdentity(repoPath: string): string {
+    if (!path.isAbsolute(repoPath)) {
+        const normalized = path.posix.normalize(repoPath.replace(/\\/g, '/')).replace(/\/+$/, '') || '.';
+        if (normalized !== repoPath) {
+            console.log(`repoPath '${repoPath}' identifies the component as repository path '${normalized}'`);
+        }
+        return normalized;
+    }
+    const hint = `Pass repoPath relative to the repository root (for example 'src/MyApp'), or an absolute path inside the checked-out repository.`;
+    const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8', cwd: repoPath });
+    const topLevel = (top.stdout || '').trim();
+    if (top.status !== 0 || !topLevel) {
+        throw new Error(`repoPath '${repoPath}' is an absolute path, but it is not a directory inside a git checkout, so its repository-relative path cannot be determined. ${hint}`);
+    }
+    let relative: string;
+    try {
+        relative = path.relative(fs.realpathSync.native(topLevel), fs.realpathSync.native(repoPath));
+    } catch (err: any) {
+        throw new Error(`repoPath '${repoPath}' could not be resolved: ${err.message}. ${hint}`);
+    }
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+        throw new Error(`repoPath '${repoPath}' is outside the git repository at '${topLevel}'. ${hint}`);
+    }
+    const identity = relative === '' ? '.' : relative.split(path.sep).join('/');
+    console.log(`Absolute repoPath '${repoPath}' identifies the component as repository path '${identity}'`);
+    return identity;
 }
 
 // Best-effort web URL of an Azure Repos pull request. For non-TfsGit providers
@@ -70,6 +127,7 @@ async function run(): Promise<void> {
         const rearmApiKeyId = tl.getInput('rearmApiKeyId', true)!;
         const rearmUrl = tl.getInput('rearmUrl', true)!;
         const repoPath = tl.getInput('repoPath', false) || '.';
+        const repoPathId = repoPathIdentity(repoPath);
         // On PR-validation builds Build.SourceBranch is the merge ref
         // (refs/pull/<id>/merge); build on the PR's source branch instead so the
         // release lands on a real branch (matching RearmReleaseInitialize) and the
@@ -108,6 +166,7 @@ async function run(): Promise<void> {
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
         const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
         const vcsDisplayName = tl.getInput('vcsDisplayName', false);
+        const perspective = tl.getInput('perspective', false) || '';
         const allowRebuild = tl.getBoolInput('allowRebuild', false);
         
                 
@@ -129,6 +188,7 @@ async function run(): Promise<void> {
         
         console.log(`Repository URI: ${vcsUri}`);
         console.log(`Repository Path: ${repoPath}`);
+        console.log(`Repository Path sent to ReARM: ${repoPathId}`);
         console.log(`Branch: ${branch}`);
         console.log(`Commit: ${commit}`);
         console.log(`Version: ${version}`);
@@ -149,7 +209,7 @@ async function run(): Promise<void> {
         }
         addRelease.arg(['-v', version]);
         addRelease.arg(['--vcsuri', vcsUri]);
-        addRelease.arg(['--repo-path', repoPath]);
+        addRelease.arg(['--repo-path', repoPathId]);
         addRelease.arg(['--vcstype', 'git']);
         addRelease.arg(['--lifecycle', lifecycle]);
         
@@ -158,7 +218,7 @@ async function run(): Promise<void> {
         
         // Get commit message and date
         try {
-            const msgResult = spawnSync('git', ['log', '-1', '--pretty=%s'], {
+            const msgResult = spawnSync('git', ['log', '-1', `--pretty=%s ${AGENTIC_TRAILER_FMT}`], {
                 encoding: 'utf-8',
                 cwd: repoPath
             });
@@ -186,15 +246,15 @@ async function run(): Promise<void> {
                 // Get commits since last release
                 const result = spawnSync('git', [
                     'log', '-100', `${lastCommit}..${commit}`,
-                    '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae', '--', './'
+                    '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`, '--', './'
                 ], { encoding: 'utf-8', cwd: repoPath });
-                commitsOutput = result.stdout || '';
+                commitsOutput = tidyCommitList(result.stdout || '');
             } else {
                 // No last commit available, use current commit only
                 const result = spawnSync('git', [
-                    'log', '-1', '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae'
+                    'log', '-1', '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`
                 ], { encoding: 'utf-8', cwd: repoPath });
-                commitsOutput = result.stdout || '';
+                commitsOutput = tidyCommitList(result.stdout || '');
             }
             if (commitsOutput.trim()) {
                 const commitsBase64 = Buffer.from(commitsOutput).toString('base64');
@@ -261,6 +321,9 @@ async function run(): Promise<void> {
             addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
             if (vcsDisplayName) {
                 addRelease.arg(['--vcs-display-name', vcsDisplayName]);
+            }
+            if (perspective) {
+                addRelease.arg(['--perspective', perspective]);
             }
         }
         if (allowRebuild) {

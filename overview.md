@@ -50,6 +50,9 @@ Synchronizes branches, checks for changes since last release, and initializes a 
 - If `version` is provided, uses `addrelease` command with the specified version
 - If `version` is not provided, uses `getversion` command to obtain version from ReARM
 - Exposes `REARM_FULL_VERSION` and `REARM_SHORT_VERSION` variables for use in subsequent tasks
+- Fails the task when ReARM has already moved the new release to `REJECTED` or `CANCELLED` during `getversion` (for example a component policy or release trigger), so nothing is built for a release that will not accept it
+- If the commit is signed (SSH or PGP), attaches the signature and the signed payload to the source code entry when the release is created, so ReARM can verify it and component policies that check the commit signature see a real verdict; unsigned commits are skipped. Sets `REARM_SIGNATURE_PRE_ATTACHED=true` when it attached them
+- Appends `ReARM-Agent` and `ReARM-Agentic-Session` commit trailers, when present, to the commit subject it sends (RearmReleaseFinalize does the same), so ReARM can attribute commits made by AI agents
 
 ### RearmReleaseFinalize
 
@@ -238,7 +241,7 @@ steps:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | No | `26.05.20` | Version of the ReARM CLI to install. Verified against a built-in SHA256 digest for the default version. |
+| `rearmCliVersion` | No | `26.11.6` | Version of the ReARM CLI to install. Verified against a built-in SHA256 digest for the default version. |
 | `rearmCliSha256` | No | - | SHA256 digest of the CLI archive for your platform/arch. Required when overriding `rearmCliVersion` to a non-default version; otherwise the task falls back to the default pinned version. |
 
 ### RearmReleaseInitialize Inputs
@@ -255,6 +258,7 @@ steps:
 | `createComponentVersionSchema` | No | `semver` | Version schema for new component (semver, calver_reliza, calver_ubuntu, etc.) |
 | `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for new component |
 | `vcsDisplayName` | No | - | Display name for the VCS. Only used with createComponent. If not supplied, ReARM default logic will be used. |
+| `perspective` | No | - | Perspective UUID to create the component in. Only used with createComponent, and only when the component does not yet exist. Needed when the API key is scoped to a perspective rather than the whole organization (the key needs WRITE on it). ReARM Pro only. |
 | `allowRebuild` | No | `false` | Allow rebuilding release on CI reruns. If true, existing releases will be rebuilt instead of rejected. |
 
 ### RearmReleaseInitialize Outputs
@@ -288,6 +292,7 @@ steps:
 | `createComponentVersionSchema` | No | `semver` | Version schema for new component (semver, calver_reliza, calver_ubuntu, etc.) |
 | `createComponentBranchVersionSchema` | No | `semver` | Feature branch version schema for new component |
 | `vcsDisplayName` | No | - | Display name for the VCS. Only used with createComponent. If not supplied, ReARM default logic will be used. |
+| `perspective` | No | - | Perspective UUID to create the component in. Only used with createComponent, and only when the component does not yet exist. Needed when the API key is scoped to a perspective rather than the whole organization (the key needs WRITE on it). ReARM Pro only. |
 | `allowRebuild` | No | `false` | Allow rebuilding release on CI reruns. If true, existing releases will be rebuilt instead of rejected. |
 
 ### RearmAddMultiRelease Inputs

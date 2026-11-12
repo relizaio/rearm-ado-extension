@@ -9,7 +9,7 @@
     "author": "Reliza Incorporated",
     "version": {
         "Major": 1,
-        "Minor": 5,
+        "Minor": 6,
         "Patch": 0
     },
     "instanceNameFormat": "Install Rearm CLI $(rearmCliVersion)",
@@ -18,9 +18,9 @@
             "name": "rearmCliVersion",
             "type": "string",
             "label": "Rearm CLI Version",
-            "defaultValue": "26.05.20",
+            "defaultValue": "26.11.6",
             "required": false,
-            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.05.20'). The default version is verified against a SHA256 digest hardcoded into this task. First-class PullRequest support (--pr-* flags) requires 26.05.20 or later. To install a different version you MUST also provide its SHA256 digest via 'rearmCliSha256'; otherwise the task falls back to the default pinned version."
+            "helpMarkDown": "Version of the Rearm CLI to install (e.g., '26.11.6'). The default version is verified against a SHA256 digest hardcoded into this task. First-class PullRequest support (--pr-* flags) requires 26.05.20 or later. To install a different version you MUST also provide its SHA256 digest via 'rearmCliSha256'; otherwise the task falls back to the default pinned version."
         },
         {
             "name": "rearmCliSha256",

@@ -9,7 +9,7 @@
     "author": "Reliza Incorporated",
     "version": {
         "Major": 1,
-        "Minor": 5,
+        "Minor": 6,
         "Patch": 0
     },
     "instanceNameFormat": "Add Multiple Releases with ReARM",

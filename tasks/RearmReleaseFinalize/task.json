@@ -9,7 +9,7 @@
     "author": "Reliza Incorporated",
     "version": {
         "Major": 1,
-        "Minor": 5,
+        "Minor": 6,
         "Patch": 0
     },
     "instanceNameFormat": "Finalize Release with ReARM",
@@ -173,6 +173,13 @@
             "label": "VCS Display Name",
             "required": false,
             "helpMarkDown": "Display name for the VCS. Only used with createComponent. If not supplied, ReARM default logic will be used."
+        },
+        {
+            "name": "perspective",
+            "type": "string",
+            "label": "Perspective UUID for New Component",
+            "required": false,
+            "helpMarkDown": "Perspective UUID to create the component in. Only used with createComponent, and only when the component does not yet exist (ignored otherwise, so it is safe to leave set on every build). Needed when the API key is scoped to a perspective rather than the whole organization: without it ReARM authorizes component creation organization-wide and a perspective-scoped key is denied with 'Not authorized'. The key needs WRITE on this perspective. ReARM Pro only."
         },
         {
             "name": "allowRebuild",

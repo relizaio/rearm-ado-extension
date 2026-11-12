@@ -1,6 +1,11 @@
 import * as tl from 'azure-pipelines-task-lib/task';
 import { spawnSync } from 'child_process';
 
+// AI-agent attribution trailers, appended onto the commit subject so the ReARM
+// backend's commit-trailer parser can read them (same format as RearmReleaseInitialize;
+// both must send the same message, since ReARM keeps one entry per commit).
+const AGENTIC_TRAILER_FMT = '%(trailers:key=ReARM-Agent,key=ReARM-Agentic-Session,unfold,separator=%x20)';
+
 function cleanRef(ref: string): string {
     return ref.replace(/^refs\/heads\//, '');
 }
@@ -108,6 +113,7 @@ async function run(): Promise<void> {
         const createComponentVersionSchema = tl.getInput('createComponentVersionSchema', false) || 'semver';
         const createComponentBranchVersionSchema = tl.getInput('createComponentBranchVersionSchema', false) || 'semver';
         const vcsDisplayName = tl.getInput('vcsDisplayName', false);
+        const perspective = tl.getInput('perspective', false) || '';
         const allowRebuild = tl.getBoolInput('allowRebuild', false);
         
                 
@@ -158,7 +164,7 @@ async function run(): Promise<void> {
         
         // Get commit message and date
         try {
-            const msgResult = spawnSync('git', ['log', '-1', '--pretty=%s'], {
+            const msgResult = spawnSync('git', ['log', '-1', `--pretty=%s ${AGENTIC_TRAILER_FMT}`], {
                 encoding: 'utf-8',
                 cwd: repoPath
             });
@@ -186,13 +192,13 @@ async function run(): Promise<void> {
                 // Get commits since last release
                 const result = spawnSync('git', [
                     'log', '-100', `${lastCommit}..${commit}`,
-                    '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae', '--', './'
+                    '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`, '--', './'
                 ], { encoding: 'utf-8', cwd: repoPath });
                 commitsOutput = result.stdout || '';
             } else {
                 // No last commit available, use current commit only
                 const result = spawnSync('git', [
-                    'log', '-1', '--date=iso-strict', '--pretty=%H|||%ad|||%s|||%an|||%ae'
+                    'log', '-1', '--date=iso-strict', `--pretty=%H|||%ad|||%s ${AGENTIC_TRAILER_FMT}|||%an|||%ae`
                 ], { encoding: 'utf-8', cwd: repoPath });
                 commitsOutput = result.stdout || '';
             }
@@ -261,6 +267,9 @@ async function run(): Promise<void> {
             addRelease.arg(['--createcomponent-branch-version-schema', createComponentBranchVersionSchema]);
             if (vcsDisplayName) {
                 addRelease.arg(['--vcs-display-name', vcsDisplayName]);
+            }
+            if (perspective) {
+                addRelease.arg(['--perspective', perspective]);
             }
         }
         if (allowRebuild) {

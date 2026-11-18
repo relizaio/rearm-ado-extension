@@ -6,7 +6,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 
 // Default pinned ReARM CLI version shipped with this extension.
-const DEFAULT_REARM_CLI_VERSION = '26.11.8';
+const DEFAULT_REARM_CLI_VERSION = '26.11.9';
 
 // Hardcoded SHA256 digests for the default pinned version, keyed by
 // platform-architecture suffix (e.g. 'linux-amd64'). These are the source of
@@ -14,20 +14,20 @@ const DEFAULT_REARM_CLI_VERSION = '26.11.8';
 // checksums file. To pin a different version, callers must supply the matching
 // digest via the rearmCliSha256 input.
 const DEFAULT_SHA256: Record<string, string> = {
-    'darwin-amd64': '91fffeb004cc482132cc18f50a8e0a4883d727a16b06391f856b85846759ec55',
-    'darwin-arm64': '2795c1401f4d2fa775cd86d07f00e1b0ca3d544e374edb99a894bac0c7893140',
-    'freebsd-386': '4d9d3f8d5226f09c40d39feeecac8f2ea00eb8b0bbd2f4457afafea3cb2b5de0',
-    'freebsd-amd64': '4149eb6a16eab95668c021bfc0d935ea92d0ee1351f3860c6fd889e157b181c5',
-    'freebsd-arm': '0c61405bda8c172a4ba2a06f158a7d536936b4b68e08ba81634caf40cd83ac25',
-    'linux-386': '5c6e43b4e7444a68bb5be55616a25e2ff76b6d4e023dab01c95bd4af4ff7ced8',
-    'linux-amd64': '9a2b4d75ec03c1658c3caa9071f726a50aa110e0adc8f41d7383dd14d17c2479',
-    'linux-arm': '9f44d8b5cd5e0e71af98f5175732c42eb5ab63c28242277d8bb6b62d149291e7',
-    'linux-arm64': 'fe948e536f6a38433079c135017ea5c6ef85f2a9aac69dc03af24b6c66968809',
-    'openbsd-386': '2dad28622e313a8a08be4f1efc46306c35afa74552c2a2337268b89483441600',
-    'openbsd-amd64': '7946f21e623bf8a53a8c71f3e9d69341b47c3e6ce79c25222ccbc4bb7dced197',
-    'solaris-amd64': 'e5aa5d3c74d7660bda43054967915d3190b727069d494f478672e36b8d3cc6f1',
-    'windows-386': 'a60a5401d7469c14a563dcb21701580a57b296a1f052655ecbcd4c1f82f190ff',
-    'windows-amd64': 'bf4bb370f5326b73c6e626613c08033e41e240a8b999256bc978e746cbd0945c'
+    'darwin-amd64': '0e14cd4661a2833075c88941fd681461eb2da3937757c0ee09331e1b3f6bdbad',
+    'darwin-arm64': '90bd3fac675efaa93a22e835de864ff0c05499d34b45b5c1d51232bae89e241d',
+    'freebsd-386': 'e536af62aa4672994c4bca627249f4298cfad05ef9bedc131736bf72bd64db7a',
+    'freebsd-amd64': '4d66d8cced888ae0f4915ab5d204245bc23ace3a66d897d9d264e74ac5228e71',
+    'freebsd-arm': 'bd5e46ad7dcb932583c4983e909b3933b6e86fbb9c55b0cc86e434c59ab29093',
+    'linux-386': '8af0a3cbc143de4348fafdf4ee27a405396d9714028c7c3480cb58110d872bcd',
+    'linux-amd64': '553a6472fbbbd382e8ea5ca54f4f47c5df25df0f6c7f07e26cfdcf20df8bf532',
+    'linux-arm': '58e38ff2484b6ae220ff085528a1edd1e60367fd0c863946cd25c74526b9863d',
+    'linux-arm64': '1bcdb8c365a24e21dc05a3d57067ebb4740d007dda402dd6d4fa9f8fa1ba7a35',
+    'openbsd-386': '4f30a5365f91e3664f2b436cd7d1cb4cef0bea4ed54cc0f063e428fcc8167823',
+    'openbsd-amd64': '65bdbbc6c639a149afa9db7b7251a5b2d8dc29ea25487134bffe1ffdac815345',
+    'solaris-amd64': '5c51ec880eebab5e5c98b5022d236d287814db1d1541ca645c32fcf38466d913',
+    'windows-386': 'ff2d2eb1b4df7a542cd875b19a96dd85847c7c9ad4ee8ac343863d3bc9d59f19',
+    'windows-amd64': '091b40cce89231d4fd24665a5172166195f26b5d56822342adec7b461eea65d6'
 };
 
 // Map Node.js platform/arch to ReARM CLI platform suffix

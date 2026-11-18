@@ -241,7 +241,7 @@ steps:
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `rearmCliVersion` | No | `26.11.8` | Version of the ReARM CLI to install. Verified against a built-in SHA256 digest for the default version. |
+| `rearmCliVersion` | No | `26.11.9` | Version of the ReARM CLI to install. Verified against a built-in SHA256 digest for the default version. |
 | `rearmCliSha256` | No | - | SHA256 digest of the CLI archive for your platform/arch. Required when overriding `rearmCliVersion` to a non-default version; otherwise the task falls back to the default pinned version. |
 
 ### RearmReleaseInitialize Inputs
